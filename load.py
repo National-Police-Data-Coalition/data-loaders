@@ -3,6 +3,7 @@ import json
 import argparse
 import logging
 
+from deepdiff import DeepDiff
 from neomodel import config
 from models.types.enums import Ethnicity
 from models.officer import Officer, StateID
@@ -13,8 +14,16 @@ GRAPH_NM_URI = "localhost:7687"
 GRAPH_PASSWORD = "Vm*i.a3ip9B.6Q"
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format='%(asctime)s - %(levelname)s - %(message)s')
+
+LOGGING_LEVELS =[
+    "DEBUG",
+    "INFO",
+    "WARNING",
+    "ERROR",
+    "CRITICAL"
+]
 
 # Neomodel setup
 neo_url = "bolt://{user}:{pw}@{uri}".format(
@@ -58,6 +67,7 @@ def load_officer(data):
         value=state_id_data[0]['value']
     )
 
+
     if sid is None:
         logging.info(f"State ID not found: {state_id_data[0]}")
 
@@ -70,6 +80,20 @@ def load_officer(data):
         logging.info(f"Created Officer: {o}")
 
         sid.officer.connect(o)
+    else:
+        o = sid.officer.single()
+
+        # Detect differences between existing officer data and incoming data
+        incoming_data_mapped = officer_data.copy()
+        if "ethnicity" in incoming_data_mapped:
+            incoming_data_mapped["ethnicity"] = map_ethnicity(
+                incoming_data_mapped["ethnicity"])
+        # Ignore dynamically generated fields like uid
+        ignore_fields = ['uid', 'element_id_property']
+        existing_data = {k: v for k, v in o.__properties__.items() if k not in ignore_fields}
+        diff = DeepDiff(existing_data, incoming_data_mapped, ignore_order=True)
+        if diff:
+            logging.info(f"Differences detected for officer {o.uid}: {diff}")
 
     # # Create Employment nodes and relationships
     # for employment_data in employment_data_list:
@@ -108,10 +132,17 @@ def main():
         help="Input JSONL file to load data from"
     )
     parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enable verbose output"
+        "-l", "--logging",
+        type=str,
+        help="Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
     )
+
+    if parser.parse_args().logging:
+        log_level = parser.parse_args().logging.upper()
+        if log_level not in LOGGING_LEVELS:
+            logging.error(f"Invalid logging level: {log_level}")
+            return
+        logging.getLogger().setLevel(parser.parse_args().logging.upper())
 
     jsonl_filename = parser.parse_args().input_file
 
