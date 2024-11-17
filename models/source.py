@@ -6,7 +6,7 @@ from neomodel import (
     RelationshipTo, RelationshipFrom,
     StringProperty, DateTimeProperty,
     UniqueIdProperty, BooleanProperty,
-    EmailProperty
+    EmailProperty, JSONProperty
 )
 from models.complaint import BaseSourceRel
 
@@ -102,6 +102,31 @@ class SourceMember(StructuredRel):
         """Represent instance as a unique string."""
         return f"<SourceMember( \
         id={self.uid}>"
+
+
+class Citation(StructuredRel):
+    uid = UniqueIdProperty()
+    date = DateTimeProperty(default=datetime.now())
+    url = StringProperty(required=True)
+    diff = JSONProperty()
+
+    def __repr__(self):
+        """Represent instance as a unique string."""
+        return f"<Citation {self.uid}>"
+
+    # @property
+    # def diffs(self):
+    #     """Read-only access to diffs."""
+    #     return self._diffs
+
+    # def add_diff(self, url: str, diff: dict, timestamp: datetime):
+    #     new_diff = json.loads({
+    #         "url": url,
+    #         "diff": diff,
+    #         "timestamp": timestamp.isoformat()
+    #     })
+    #     self._diffs.append(new_diff)
+    #     self.save()
 
 
 class Source(StructuredNode):
