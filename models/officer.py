@@ -1,4 +1,5 @@
 from models.types.enums import State, Ethnicity, Gender
+from models.source import Citation
 
 from neomodel import (
     StructuredNode,
@@ -41,7 +42,7 @@ class Officer(StructuredNode):
 
     # Relationships
     state_ids = RelationshipTo('StateID', "HAS_STATE_ID")
-    units = Relationship(
+    units = RelationshipTo(
         'models.agency.Unit', "MEMBER_OF_UNIT")
     litigation = Relationship(
         'models.litigation.Litigation', "NAMED_IN")
@@ -51,6 +52,8 @@ class Officer(StructuredNode):
         'models.complaint.Investigation', "LEAD_BY")
     commands = Relationship(
         'models.agency.Unit', "COMMANDS")
+    citations = RelationshipTo(
+        'models.source.Source', "UPDATED_BY", model=Citation)
 
     def __repr__(self):
         return f"<Officer {self.id}>"

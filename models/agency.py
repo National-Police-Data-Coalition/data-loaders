@@ -1,4 +1,7 @@
+from datetime import date
 from models.types.enums import State, PropertyEnum
+from models.source import Citation
+from models.officer import Officer
 
 from neomodel import (
     StructuredNode,
@@ -7,7 +10,8 @@ from neomodel import (
     RelationshipTo,
     RelationshipFrom,
     DateProperty,
-    UniqueIdProperty
+    UniqueIdProperty,
+    One
 )
 
 
@@ -43,16 +47,57 @@ class Unit(StructuredNode):
     date_etsablished = DateProperty()
 
     # Relationships
-    agency = RelationshipFrom("Agency", "ESTABLISHED_BY")
-    commander = RelationshipTo(
+    agency = RelationshipTo("Agency", "ESTABLISHED_BY", cardinality=One)
+    commanders = RelationshipTo(
         "models.officer.Officer",
         "COMMANDED_BY", model=UnitMembership)
-    officers = RelationshipTo(
+    officers = RelationshipFrom(
         "models.officer.Officer",
-        "MEMBER_OF", model=UnitMembership)
+        "MEMBER_OF_UNIT", model=UnitMembership)
+    citations = RelationshipTo(
+        'models.source.Source', "UPDATED_BY", model=Citation)
 
     def __repr__(self):
         return f"<Unit {self.name}>"
+
+    def get_current_commander(self):
+        """
+        Get the current commander of a unit.
+
+        :param unit: The unit to get the commander for
+
+        :return: The current commander
+        """
+        query = """
+        MATCH (u:Unit {uid: $unit_uid})-[r:COMMANDED_BY]->(o:Officer)
+        WHERE r.latest_date IS NULL
+        RETURN o
+        """
+        results, meta = self.cypher(query, {
+            "unit_uid": self.uid
+        })
+        if results:
+            return Officer.inflate(results[0][0])
+        return None
+
+    def update_commander(self, officer: Officer, date: date):
+        """
+        Update the commander of a unit. Ends the term of the
+        current commander (if needed) and creates a new relationship
+        with the new commander.
+
+        :param unit: The unit to update the commander for
+        :param officer: The officer to set as the commander
+        :param date: The date the officer became the commander
+        """
+        cur_com = self.get_current_commander()
+        if cur_com:
+            cur_com_rel = self.commanders.relationship(cur_com)
+            cur_com_rel.latest_date = date
+            cur_com_rel.save()
+        self.commanders.connect(officer, {
+            "earliest_date": date
+        })
 
 
 class Agency(StructuredNode):
@@ -69,7 +114,9 @@ class Agency(StructuredNode):
     jurisdiction = StringProperty(choices=Jurisdiction.choices())
 
     # Relationships
-    units = RelationshipTo("Unit", "HAS_UNIT")
+    units = RelationshipTo("Unit", "ESTABLISHED")
+    citations = RelationshipTo(
+        'models.source.Source', "UPDATED_BY", model=Citation)
 
     def __repr__(self):
         return f"<Agency {self.name}>"
