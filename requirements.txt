@@ -1,4 +1,4 @@
 pydantic
 neomodel
 deepdiff
-dotenv
+python-dotenv
