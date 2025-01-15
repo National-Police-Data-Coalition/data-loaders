@@ -13,11 +13,22 @@ class LegalCaseType(str, PropertyEnum):
     CRIMINAL = "CRIMINAL"
 
 
+class CourtLevel(str, PropertyEnum):
+    MUNICIPAL_OR_COUNTY = "Municipal or County"
+    STATE_TRIAL = "State Trial Court"
+    STATE_INTERMEDIATE_APPELLATE = "State Intermediate Appellate"
+    STATE_HIGHEST = "State Highest"
+    FEDERAL_DISTRICT = "Federal District"
+    FEDERAL_APPELLATE = "Federal Appellate"
+    US_SUPREME_COURT = "U.S. Supreme"
+
+
 class Litigation(StructuredNode):
     uid = UniqueIdProperty()
     case_title = StringProperty()
     docket_number = StringProperty()
-    court_level = StringProperty()
+    court_name = StringProperty()
+    court_level = StringProperty(choices=CourtLevel.choices())
     jurisdiction = StringProperty()
     state = StringProperty()
     description = StringProperty()
