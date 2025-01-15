@@ -1,6 +1,6 @@
 """Define the Classes for Complaints."""
 from models.types.enums import PropertyEnum
-from models.source import Citation
+# from models.source import Citation
 from neomodel import (
     StructuredNode,
     StructuredRel,
@@ -79,8 +79,8 @@ class Complaint(StructuredNode):
     allegations = RelationshipTo("Allegation", "ALLEGED")
     investigations = RelationshipTo("Investigation", "EXAMINED_BY")
     penalties = RelationshipTo("Penalty", "RESULTS_IN")
-    citations = RelationshipTo(
-        'models.source.Source', "UPDATED_BY", model=Citation)
+    # citations = RelationshipTo(
+    #     'models.source.Source', "UPDATED_BY", model=Citation)
     # civilian_review_board = RelationshipFrom("CivilianReviewBoard", "REVIEWED")
 
     def __repr__(self):
