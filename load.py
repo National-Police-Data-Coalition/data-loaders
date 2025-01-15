@@ -2,20 +2,21 @@ import os
 import json
 import argparse
 import logging
+import threading
 
 from dotenv import dotenv_values
 from datetime import datetime
+import time
 from deepdiff import DeepDiff
 from neomodel import config, db
 from models.officer import Officer, StateID
 from models.agency import Unit, Agency
 from models.source import Source
 
-
 cfg = dotenv_values(".env")
 
 logging.basicConfig(
-    level=logging.WARNING,
+    level=logging.ERROR,
     format='%(asctime)s - %(levelname)s - %(message)s')
 
 LOGGING_LEVELS = [
@@ -378,22 +379,33 @@ def load_unit(data):
             u.update_commander(c, scrape_date)
 
 
-def load_jsonl_to_neo4j(jsonl_filename):
+import concurrent.futures
+from functools import partial
+
+def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
     if not os.path.exists(jsonl_filename):
         logging.error(f"File {jsonl_filename} does not exist.")
         return
 
-    with open(jsonl_filename, mode='r', encoding='utf-8') as jsonl_file:
-        for line in jsonl_file:
-            data = json.loads(line)
-            model = data.get("model")
+    def process_line(line, lock):
+        data = json.loads(line)
+        model = data.get("model")
 
+        with lock:
             if model == "officer":
                 load_officer(data)
             elif model == "unit":
                 load_unit(data)
             else:
                 logging.error(f"Unknown model: {model}")
+
+    lock = threading.Lock()
+    with open(jsonl_filename, mode='r', encoding='utf-8') as jsonl_file:
+        lines = jsonl_file.readlines()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        executor.map(partial(process_line, lock=lock), lines)
+
 
 
 def main():
@@ -409,18 +421,31 @@ def main():
         type=str,
         help="Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
     )
+    parser.add_argument(
+        "-w", "--workers",
+        type=int,
+        default=4,
+        help="Number of worker threads (default: 4)"
+    )
 
-    if parser.parse_args().logging:
-        log_level = parser.parse_args().logging.upper()
+    args = parser.parse_args()
+
+    if args.logging:
+        log_level = args.logging.upper()
         if log_level not in LOGGING_LEVELS:
             logging.error(f"Invalid logging level: {log_level}")
             return
-        logging.getLogger().setLevel(parser.parse_args().logging.upper())
+        logging.getLogger().setLevel(log_level)
 
-    jsonl_filename = parser.parse_args().input_file
+    jsonl_filename = args.input_file
+    max_workers = args.workers
 
-    load_jsonl_to_neo4j(jsonl_filename)
+    load_jsonl_to_neo4j(jsonl_filename, max_workers)
+
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     main()
+    end_time = time.time()
+    print(end_time - start_time)
