@@ -1,6 +1,6 @@
 """Define the Classes for Complaints."""
 from models.types.enums import PropertyEnum
-# from models.source import Citation
+from models.source import Citation
 from neomodel import (
     StructuredNode,
     StructuredRel,
@@ -21,32 +21,34 @@ class RecordType(str, PropertyEnum):
 
 # Neo4j Models
 class BaseSourceRel(StructuredRel):
+    uid = UniqueIdProperty()
     record_type = StringProperty(
         choices=RecordType.choices(),
         required=True
     )
+    date_published = DateProperty()
 
-
-class LegalSourceRel(BaseSourceRel):
+    # Legal Source Properties
     court = StringProperty()
     judge = StringProperty()
     docket_number = StringProperty()
-    date_of_action = DateProperty()
+    case_event_date = DateProperty()
 
-
-class NewsSourceRel(BaseSourceRel):
+    # News Source Properties
     publication_name = StringProperty()
-    publication_date = DateProperty()
     publication_url = StringProperty()
     author = StringProperty()
     author_url = StringProperty()
     author_email = StringProperty()
 
-
-class GovernmentSourceRel(BaseSourceRel):
+    # Government Source Properties
     reporting_agency = StringProperty()
     reporting_agency_url = StringProperty()
     reporting_agency_email = StringProperty()
+
+
+class PersonalSourceRel(BaseSourceRel):
+    pass
 
 
 class Location(StructuredNode):
@@ -71,7 +73,7 @@ class Complaint(StructuredNode):
     outcome_of_contact = StringProperty()
 
     # Relationships
-    source_org = RelationshipFrom("models.source.Source", "REPORTED", model=BaseSourceRel)
+    source_org = RelationshipTo("models.source.Source", "HAS_SOURCE", model=BaseSourceRel)
     location = RelationshipTo("Location", "OCCURRED_AT")
     civlian_witnesses = RelationshipFrom("models.civilian.Civilian", "WITNESSED")
     police_witnesses = RelationshipFrom("models.officer.Officer", "WITNESSED")
@@ -79,8 +81,8 @@ class Complaint(StructuredNode):
     allegations = RelationshipTo("Allegation", "ALLEGED")
     investigations = RelationshipTo("Investigation", "EXAMINED_BY")
     penalties = RelationshipTo("Penalty", "RESULTS_IN")
-    # citations = RelationshipTo(
-    #     'models.source.Source', "UPDATED_BY", model=Citation)
+    citations = RelationshipTo(
+        'models.source.Source', "UPDATED_BY", model=Citation)
     # civilian_review_board = RelationshipFrom("CivilianReviewBoard", "REVIEWED")
 
     def __repr__(self):

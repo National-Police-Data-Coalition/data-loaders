@@ -22,7 +22,11 @@ from models.source import Source
 
 cfg = dotenv_values(".env")
 
+log_path = "_load.log"
+log_path = datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + log_path
+
 logging.basicConfig(
+    filename=log_path,
     level=logging.ERROR,
     format='%(asctime)s %(threadName)s %(levelname)s: %(message)s')
 
@@ -186,7 +190,7 @@ def find_via_citation(label, source):
         if len(results) > 1:
             logging.warning(f"Found multiple nodes for label {label}")
             return None
-        return results[0][0]
+        return results[0][1]
     return None
 
 
@@ -249,7 +253,7 @@ def local_get_current_commander(unit):
     return None
 
 
-def find_existing_complaint(complaint_data, source):
+def find_existing_complaint(url, complaint_data, source):
     """
     Find an existing complaint that matches the incoming data.
     """
@@ -272,7 +276,15 @@ def find_existing_complaint(complaint_data, source):
                 ))
         return Complaint.inflate(results[0][0])
     else:
-        return None
+        c = find_via_citation(url, source)
+        if c is None:
+            return None
+        try:
+            c = Complaint.inflate(c)
+        except Exception as e:
+            logging.error(f"Error inflating complaint: {e}")
+            return None
+        return c
 
 
 def create_allegation(data, source):
@@ -329,11 +341,30 @@ def load_complaint(data):
     if source is None:
         logging.error(f"Source not found: {data.get('source')}")
         return
-
-    complaint = find_existing_complaint(complaint_data, source)
+    complaint = find_via_citation(
+        data.get("url"),
+        source
+    )
     if complaint is not None:
-        logging.warning("Updates to existing complaints is not yet supported.")
+        try:
+            complaint = Complaint.inflate(complaint)
+        except Exception as e:
+            logging.error(f"Error inflating complaint: {e}")
+            return
+        logging.info(f"Updating complaint {complaint.uid}")
+        # Check if the incoming data is more recent than the existing data
+        if not source_outdated(complaint, source, data):
+            diff = detect_diff(complaint, complaint_data)
+            if diff:
+                logging.info(
+                    f"Differences detected for complaint {complaint.uid}: {diff}")
+                update_item(complaint, complaint_data)
+                add_citation(complaint, source, data, diff.to_dict())
+        else:
+            logging.info(f"Skipping outdated data for complaint {complaint.uid}")
+            return
         return
+    logging.info(f"Creating new complaint: {complaint_data['record_id']}")
 
     # Create Complaint
     complaint_data['incident_date'] = convert_string_to_date(
@@ -358,6 +389,7 @@ def load_complaint(data):
             source,
             source_details
         )
+        add_citation(complaint, source, data)
     except Exception as e:
         logging.error(
             "Failed to connect source: {} - Discarding complaint {}.".format(
@@ -573,6 +605,7 @@ def load_unit(data):
 import concurrent.futures
 from functools import partial
 
+
 def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
     if not os.path.exists(jsonl_filename):
         logging.error(f"File {jsonl_filename} does not exist.")
@@ -598,7 +631,6 @@ def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         executor.map(partial(process_line, lock=lock), lines)
-
 
 
 def main():

@@ -8,7 +8,6 @@ from neomodel import (
     UniqueIdProperty, BooleanProperty,
     EmailProperty, JSONProperty
 )
-from models.complaint import BaseSourceRel
 
 
 class MemberRole(str, PropertyEnum):
@@ -144,9 +143,6 @@ class Source(StructuredNode):
     members = RelationshipFrom(
         "models.user.User",
         "IS_MEMBER", model=SourceMember)
-    complaints = RelationshipTo(
-        "models.complaint.Complaint",
-        "REPORTED", model=BaseSourceRel)
     invitations = RelationshipTo(
         "Invitation", "HAS_PENDING_INVITATION")
     staged_invitations = RelationshipTo(
