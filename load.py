@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import argparse
 import logging
@@ -8,16 +9,27 @@ from dotenv import dotenv_values
 from datetime import datetime
 import time
 from deepdiff import DeepDiff
-from neomodel import config, db
+from neomodel import config, db, DeflateError
+from models.complaint import (
+    Complaint, Allegation, Penalty,
+    Location
+)
+from models.civilian import Civilian
+from models.attachment import Attachment
 from models.officer import Officer, StateID
 from models.agency import Unit, Agency
 from models.source import Source
 
 cfg = dotenv_values(".env")
 
+log_path = "_load.log"
+log_path = datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + log_path
+
 logging.basicConfig(
+    filename=log_path,
     level=logging.ERROR,
-    format='%(asctime)s - %(levelname)s - %(message)s')
+    format='%(asctime)s %(threadName)s %(levelname)s: %(message)s')
+
 
 LOGGING_LEVELS = [
     "DEBUG",
@@ -34,6 +46,9 @@ neo_url = "bolt://{user}:{pw}@{uri}".format(
     uri=cfg.get("GRAPH_NM_URI")
 )
 config.DATABASE_URL = neo_url
+
+# Missing Data log
+missing = []
 
 
 def identify_source(data):
@@ -175,8 +190,26 @@ def find_via_citation(label, source):
         if len(results) > 1:
             logging.warning(f"Found multiple nodes for label {label}")
             return None
-        return results[0][0]
+        return results[0][1]
     return None
+
+
+def follow_officer_ref(officer_ref, source):
+    if officer_ref is None:
+        return None
+    o = Officer.nodes.get_or_none(uid=officer_ref)
+    if o is None:
+        o = find_via_citation(officer_ref, source)
+        if o is None:
+            logging.error(f"Officer not found: {officer_ref}")
+            missing.append(officer_ref)
+            return
+        try:
+            o = Officer.inflate(o)
+        except Exception as e:
+            logging.error(f"Error inflating officer {o}: {e}")
+            return None
+    return o
 
 
 def convert_string_to_date(date_string):
@@ -220,6 +253,188 @@ def local_get_current_commander(unit):
     return None
 
 
+def find_existing_complaint(url, complaint_data, source):
+    """
+    Find an existing complaint that matches the incoming data.
+    """
+
+    query = """
+    MATCH (s:Source {uid: $source_uid})-[:REPORTED]->(c:Complaint)
+    WHERE c.record_id = $c_record_id
+    RETURN c
+    """
+    results, meta = db.cypher_query(query, {
+        "c_record_id": complaint_data['record_id'],
+        "source_uid": source.uid
+    })
+    if results:
+        if len(results) > 1:
+            logging.warning(
+                "Found multiple complaints with Record ID {} from {}".format(
+                    complaint_data['record_id'],
+                    source.uid
+                ))
+        return Complaint.inflate(results[0][0])
+    else:
+        c = find_via_citation(url, source)
+        if c is None:
+            return None
+        try:
+            c = Complaint.inflate(c)
+        except Exception as e:
+            logging.error(f"Error inflating complaint: {e}")
+            return None
+        return c
+
+
+def create_allegation(data, source):
+    o_uid = data.pop('perpetrator_uid', None)
+    civ = data.pop('complainant', None)
+
+    o = follow_officer_ref(o_uid, source)
+
+    c = None
+    if civ is not None:
+        try:
+            c = Civilian(**civ).save()
+        except DeflateError as e:
+            logging.error(f"Failed to create civilian {civ}: {e}")
+
+    try:
+        a = Allegation(**data).save()
+    except DeflateError as e:
+        logging.error(f"Failed to create allegation {data}: {e}")
+        if c:
+            c.delete()
+        return None
+    if c:
+        a.complainant.connect(c)
+    if o:
+        a.accused.connect(o)
+    return a
+
+
+def create_penalty(data, source):
+    o_uid = data.pop('officer_uid')
+
+    o = follow_officer_ref(o_uid, source)
+    try:
+        p = Penalty(**data).save()
+    except DeflateError as e:
+        logging.error(f"Failed to create penalty {data}: {e}")
+        return None
+    if o:
+        p.officer.connect(o)
+    return p
+
+
+def load_complaint(data):
+    complaint_data = data.get("data", {})
+    source_details = complaint_data.pop('source_details', {})
+    location = complaint_data.pop('location', {})
+    attachments = complaint_data.pop('attachments', [])
+    allegations = complaint_data.pop('allegations', [])
+    # investigations = complaint_data.pop('investigations', [])
+    penalties = complaint_data.pop('penalties', [])
+
+    source = identify_source(data)
+    if source is None:
+        logging.error(f"Source not found: {data.get('source')}")
+        return
+    complaint = find_via_citation(
+        data.get("url"),
+        source
+    )
+    if complaint is not None:
+        try:
+            complaint = Complaint.inflate(complaint)
+        except Exception as e:
+            logging.error(f"Error inflating complaint: {e}")
+            return
+        logging.info(f"Updating complaint {complaint.uid}")
+        # Check if the incoming data is more recent than the existing data
+        if not source_outdated(complaint, source, data):
+            diff = detect_diff(complaint, complaint_data)
+            if diff:
+                logging.info(
+                    f"Differences detected for complaint {complaint.uid}: {diff}")
+                update_item(complaint, complaint_data)
+                add_citation(complaint, source, data, diff.to_dict())
+        else:
+            logging.info(f"Skipping outdated data for complaint {complaint.uid}")
+            return
+        return
+    logging.info(f"Creating new complaint: {complaint_data['record_id']}")
+
+    # Create Complaint
+    complaint_data['incident_date'] = convert_string_to_date(
+        complaint_data['incident_date'])
+    complaint_data['received_date'] = convert_string_to_date(
+        complaint_data['received_date'])
+    complaint_data['closed_date'] = convert_string_to_date(
+        complaint_data['closed_date'])
+
+    try:
+        complaint = Complaint(**complaint_data).save()
+    except DeflateError as e:
+        logging.error("Failed to create complaint ({}): {}".format(
+            json.dumps(complaint_data),
+            e
+        ))
+        return
+
+    # Connect Source
+    try:
+        complaint.source_org.connect(
+            source,
+            source_details
+        )
+        add_citation(complaint, source, data)
+    except Exception as e:
+        logging.error(
+            "Failed to connect source: {} - Discarding complaint {}.".format(
+                e,
+                complaint_data
+            ))
+        complaint.delete()
+        return
+
+    # Add Location
+    try:
+        loc = Location(**location).save()
+        complaint.location.connect(loc)
+    except DeflateError as e:
+        logging.error("Failed to create location ({}): {}".format(
+            json.dumps(location),
+            e
+        ))
+
+    # Add Attachements
+    for a_data in attachments:
+        try:
+            a = Attachment(**a_data).save()
+            complaint.attachments.connect(a)
+        except DeflateError as e:
+            logging.error("Failed to create attachement ({}): {}".format(
+                json.dumps(complaint_data),
+                e
+            ))
+
+    # Create Allegations
+    for a_data in allegations:
+        a = create_allegation(a_data, source)
+        if a is not None:
+            complaint.allegations.connect(a)
+
+    # Create Penalties
+    for p_data in penalties:
+        p = create_penalty(p_data, source)
+        if p is not None:
+            complaint.penalties.connect(p)
+
+    return
+
+
 def load_officer(data):
     officer_data = data.get("data", {})
     employment_data_list = data.get("employment", [])
@@ -241,8 +456,16 @@ def load_officer(data):
     if sid is None:
         logging.info(f"State ID not found: {state_id_data[0]}")
         sid = StateID(**state_id_data[0]).save()
-        o = Officer(**officer_data).save()
-        sid.officer.connect(o)
+        try:
+            o = Officer(**officer_data).save()
+            sid.officer.connect(o)
+        except DeflateError as e:
+            sid.delete()
+            logging.error("Failed to create officer: {} Data:\n{}".format(
+                e,
+                json.dumps(officer_data)
+            ))
+            return
         add_citation(o, source, data)
         logging.info(f"Created Officer: {o}")
     else:
@@ -382,6 +605,7 @@ def load_unit(data):
 import concurrent.futures
 from functools import partial
 
+
 def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
     if not os.path.exists(jsonl_filename):
         logging.error(f"File {jsonl_filename} does not exist.")
@@ -396,6 +620,8 @@ def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
                 load_officer(data)
             elif model == "unit":
                 load_unit(data)
+            elif model == "complaint":
+                load_complaint(data)
             else:
                 logging.error(f"Unknown model: {model}")
 
@@ -405,7 +631,6 @@ def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         executor.map(partial(process_line, lock=lock), lines)
-
 
 
 def main():
@@ -442,6 +667,15 @@ def main():
 
     load_jsonl_to_neo4j(jsonl_filename, max_workers)
 
+    output_path = "_missing_log.txt"
+    output_path = datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + output_path
+    try:
+        with open(output_path, 'w') as output_file:
+            output_file.write('\n'.join(missing))
+        print(f"Processing complete. Missing refs written to {output_path}")
+    except Exception as e:
+        print(f"Error writing to the output file: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

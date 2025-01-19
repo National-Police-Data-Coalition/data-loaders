@@ -1,5 +1,6 @@
 """Define the Classes for Complaints."""
 from models.types.enums import PropertyEnum
+from models.source import Citation
 from neomodel import (
     StructuredNode,
     StructuredRel,
@@ -20,32 +21,45 @@ class RecordType(str, PropertyEnum):
 
 # Neo4j Models
 class BaseSourceRel(StructuredRel):
+    uid = UniqueIdProperty()
     record_type = StringProperty(
         choices=RecordType.choices(),
         required=True
     )
+    date_published = DateProperty()
 
-
-class LegalSourceRel(BaseSourceRel):
+    # Legal Source Properties
     court = StringProperty()
     judge = StringProperty()
     docket_number = StringProperty()
-    date_of_action = DateProperty()
+    case_event_date = DateProperty()
 
-
-class NewsSourceRel(BaseSourceRel):
+    # News Source Properties
     publication_name = StringProperty()
-    publication_date = DateProperty()
     publication_url = StringProperty()
     author = StringProperty()
     author_url = StringProperty()
     author_email = StringProperty()
 
-
-class GovernmentSourceRel(BaseSourceRel):
+    # Government Source Properties
     reporting_agency = StringProperty()
     reporting_agency_url = StringProperty()
     reporting_agency_email = StringProperty()
+
+
+class PersonalSourceRel(BaseSourceRel):
+    pass
+
+
+class Location(StructuredNode):
+    location_type = StringProperty()
+    loocation_description = StringProperty()
+    address = StringProperty()
+    city = StringProperty()
+    state = StringProperty()
+    zip = StringProperty()
+    responsibility = StringProperty()
+    responsibility_type = StringProperty()
 
 
 class Complaint(StructuredNode):
@@ -59,15 +73,17 @@ class Complaint(StructuredNode):
     outcome_of_contact = StringProperty()
 
     # Relationships
-    source_org = RelationshipFrom("Source", "REPORTED", model=BaseSourceRel)
+    source_org = RelationshipTo("models.source.Source", "HAS_SOURCE", model=BaseSourceRel)
     location = RelationshipTo("Location", "OCCURRED_AT")
-    civlian_witnesses = RelationshipFrom("Civilian", "WITNESSED")
-    police_witnesses = RelationshipFrom("Officer", "WITNESSED")
-    attachments = RelationshipTo("Attachment", "ATTACHED_TO")
+    civlian_witnesses = RelationshipFrom("models.civilian.Civilian", "WITNESSED")
+    police_witnesses = RelationshipFrom("models.officer.Officer", "WITNESSED")
+    attachments = RelationshipTo("models.attachment.Attachment", "ATTACHED_TO")
     allegations = RelationshipTo("Allegation", "ALLEGED")
     investigations = RelationshipTo("Investigation", "EXAMINED_BY")
     penalties = RelationshipTo("Penalty", "RESULTS_IN")
-    civilian_review_board = RelationshipFrom("CivilianReviewBoard", "REVIEWED")
+    citations = RelationshipTo(
+        'models.source.Source', "UPDATED_BY", model=Citation)
+    # civilian_review_board = RelationshipFrom("CivilianReviewBoard", "REVIEWED")
 
     def __repr__(self):
         """Represent instance as a unique string."""
@@ -79,15 +95,15 @@ class Allegation(StructuredNode):
     record_id = StringProperty()
     allegation = StringProperty()
     type = StringProperty()
-    subsype = StringProperty()
+    subtype = StringProperty()
     recommended_finding = StringProperty()
     recommended_outcome = StringProperty()
     finding = StringProperty()
     outcome = StringProperty()
 
     # Relationships
-    complainant = RelationshipFrom("Civilian", "COMPLAINED_OF")
-    accused = RelationshipFrom("Officer", "ACCUSED_OF")
+    complainant = RelationshipTo("models.civilian.Civilian", "REPORTED_BY")
+    accused = RelationshipFrom("models.officer.Officer", "ACCUSED_OF")
     complaint = RelationshipFrom("Complaint", "ALLEGED")
 
     def __repr__(self):
@@ -101,7 +117,7 @@ class Investigation(StructuredNode):
     end_date = DateProperty()
 
     # Relationships
-    investigator = RelationshipFrom("Officer", "LED_BY")
+    investigator = RelationshipFrom("models.officer.Officer", "LED_BY")
     complaint = RelationshipFrom("Complaint", "EXAMINED_BY")
 
     def __repr__(self):
@@ -111,11 +127,15 @@ class Investigation(StructuredNode):
 
 class Penalty(StructuredNode):
     uid = UniqueIdProperty()
-    description = StringProperty()
+    penalty = StringProperty()
     date_assessed = DateProperty()
+    crb_plea = StringProperty()
+    crb_case_status = StringProperty()
+    crb_disposition = StringProperty()
+    agency_disposition = StringProperty()
 
     # Relationships
-    officer = RelationshipFrom("Officer", "RECEIVED")
+    officer = RelationshipFrom("models.officer.Officer", "RECEIVED")
     complaint = RelationshipFrom("Complaint", "RESULTS_IN")
 
     def __repr__(self):
