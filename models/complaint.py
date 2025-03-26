@@ -20,7 +20,7 @@ class RecordType(str, PropertyEnum):
 
 
 # Neo4j Models
-class BaseSourceRel(StructuredRel):
+class ComplaintSourceRel(StructuredRel):
     uid = UniqueIdProperty()
     record_type = StringProperty(
         choices=RecordType.choices(),

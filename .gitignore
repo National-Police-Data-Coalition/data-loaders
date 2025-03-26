@@ -123,6 +123,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.cloud
 .venv
 env/
 venv/
@@ -163,3 +164,4 @@ cython_debug/
 
 # Local JSONL files
 *.jsonl
+.log

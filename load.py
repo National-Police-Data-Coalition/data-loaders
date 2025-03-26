@@ -67,6 +67,51 @@ def identify_source(data):
     return source
 
 
+def identify_agency(agency_label):
+    """
+    Identify the agency node by label. This should be either the UID or the name.
+
+    :param agency_label: The label of the agency
+
+    :return: The Agency node or None
+    """
+    a = Agency.nodes.get_or_none(uid=agency_label)
+    if a is None:
+        a = Agency.nodes.get_or_none(name=agency_label)
+        if a is None:
+            logging.error(f"Agency not found: {agency_label}")
+            return None
+        else:
+            logging.info(f"Found Agency {a.uid} by name: {agency_label}")
+            logging.warning(
+                "Using agency name to find agency is not recommended." +
+                " Use UID instead.")
+    return a
+
+
+def identify_unit(unit_label, agency):
+    """
+    Identify the unit node by label. This should be either the UID or the name.
+
+    :param unit_label: The label of the unit
+    :param agency: The agency the unit belongs to
+
+    :return: The Unit node or None
+    """
+    u = agency.units.get_or_none(uid=unit_label)
+    if u is None:
+        u = agency.units.get_or_none(name=unit_label)
+        if u is None:
+            logging.error(f"Unit not found: {unit_label}")
+            return None
+        else:
+            logging.info(f"Found Unit {u.uid} by name: {unit_label}")
+            logging.warning(
+                "Using unit name to find unit is not recommended." +
+                " Use UID instead.")
+    return u
+
+
 def get_scrape_date(data):
     """
     Get the scrape date from the incoming data.
@@ -441,7 +486,7 @@ def load_officer(data):
 
     state_id_data = officer_data.pop("state_ids")
 
-    source = Source.nodes.get_or_none(uid=data.get("source_uid"))
+    source = identify_source(data)
     if source is None:
         logging.error(f"Source not found: {data.get('source')}")
         return
@@ -489,21 +534,24 @@ def load_officer(data):
         if unit_label is None or agency_label is None:
             logging.error(f"Incomplete employment data for officer {o.uid}")
             return
-        agency = Agency.nodes.get_or_none(uid=agency_label)
+        agency = identify_agency(agency_label)
         if agency is None:
             logging.error(f"Agency not found: {agency_label}")
             return
-        u = find_via_citation(unit_label, source)
+        u = identify_unit(unit_label, agency)
+        logging.info(f"Found Unit {u}")
         if u is None:
-            u = agency.units.filter(name__iexact=unit_label)
-            if len(u) == 0:
-                logging.error(f"Unit not found: {unit_label}")
+            logging.info(f"Unit not found: {unit_label}")
+            try:
+                u = Unit(name=unit_label).save()
+                u.agency.connect(agency)
+                agency.units.connect(u)
+                add_citation(u, source, data)
+                logging.info(f"Created Unit: {u.uid}")
+            except Exception as e:
+                logging.error(f"Error creating unit: {e}")
                 return
-        try:
-            u = Unit.inflate(u)
-        except Exception as e:
-            logging.error(f"Error inflating unit: {e}")
-            return
+
         # See if the officer is already connected to the unit
         if o.units.is_connected(u):
             logging.info(f"Officer {o.uid} already connected to unit {u.uid}")
@@ -522,6 +570,32 @@ def load_officer(data):
                 "highest_rank": employment_data.get("highest_rank")
             }
         )
+
+
+def load_agency(data):
+    agency_data = data.get("data", {})
+    source = identify_source(data)
+    if source is None:
+        logging.error(f"Source not found:  {data.get('source')}")
+        return
+
+    a = identify_agency(agency_data.get("name"))
+    if a is None:
+        a = Agency(**agency_data).save()
+        add_citation(a, source, data)
+        logging.info(f"Created Agency: {a.uid}")
+    else:
+        logging.info(f"Found Agency {a.uid}")
+        if source_outdated(a, source, data):
+            logging.warning(f"Skipping outdated data for agency {a.uid}")
+            return
+        else:
+            diff = detect_diff(a, agency_data)
+            if diff:
+                logging.info(
+                    f"Differences detected for agency {a.uid}: {diff}")
+                update_item(a, agency_data)
+                add_citation(a, source, data, diff.to_dict())
 
 
 def load_unit(data):
@@ -622,6 +696,8 @@ def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
                 load_unit(data)
             elif model == "complaint":
                 load_complaint(data)
+            elif model == "agency":
+                load_agency(data)
             else:
                 logging.error(f"Unknown model: {model}")
 
@@ -667,7 +743,7 @@ def main():
 
     load_jsonl_to_neo4j(jsonl_filename, max_workers)
 
-    output_path = "_missing_log.txt"
+    output_path = "_missing.log"
     output_path = datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + output_path
     try:
         with open(output_path, 'w') as output_file:
