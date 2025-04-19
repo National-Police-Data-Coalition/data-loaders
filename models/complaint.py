@@ -73,7 +73,7 @@ class Complaint(StructuredNode):
     outcome_of_contact = StringProperty()
 
     # Relationships
-    source_org = RelationshipTo("models.source.Source", "HAS_SOURCE", model=BaseSourceRel)
+    source_org = RelationshipTo("models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
     location = RelationshipTo("Location", "OCCURRED_AT")
     civlian_witnesses = RelationshipFrom("models.civilian.Civilian", "WITNESSED")
     police_witnesses = RelationshipFrom("models.officer.Officer", "WITNESSED")
