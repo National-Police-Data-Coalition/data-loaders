@@ -1,5 +1,6 @@
 from datetime import date
 from models.types.enums import State, PropertyEnum
+from models.infra.locations import StateNode, CountyNode, CityNode
 from models.source import Citation
 from models.officer import Officer
 
@@ -56,6 +57,12 @@ class Unit(StructuredNode):
         "MEMBER_OF_UNIT", model=UnitMembership)
     citations = RelationshipTo(
         'models.source.Source', "UPDATED_BY", model=Citation)
+    state_node = RelationshipTo(
+        "models.infra.locations.StateNode", "WITHIN_STATE")
+    county_node = RelationshipTo(
+        "models.infra.locations.CountyNode", "WITHIN_COUNTY")
+    city_node = RelationshipTo(
+        "models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Unit {self.name}>"
@@ -117,6 +124,12 @@ class Agency(StructuredNode):
     units = RelationshipTo("Unit", "ESTABLISHED")
     citations = RelationshipTo(
         'models.source.Source', "UPDATED_BY", model=Citation)
+    state_node = RelationshipTo(
+        "models.infra.locations.StateNode", "WITHIN_STATE")
+    county_node = RelationshipTo(
+        "models.infra.locations.CountyNode", "WITHIN_COUNTY")
+    city_node = RelationshipTo(
+        "models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Agency {self.name}>"

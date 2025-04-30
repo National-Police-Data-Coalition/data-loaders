@@ -83,42 +83,42 @@ class Place(StructuredNode):
         return f"<Place {self.name}>"
 
 
-class State(Place):
+class StateNode(Place):
     abbreviation = StringProperty(required=True, unique_index=True)
 
     # Relationships
-    capital = RelationshipTo("City", "HAS_CAPITAL", cardinality=ZeroOrOne)
-    counties = RelationshipTo("County", "HAS_COUNTY")
+    capital = RelationshipTo("CityNode", "HAS_CAPITAL", cardinality=ZeroOrOne)
+    counties = RelationshipTo("CountyNode", "HAS_COUNTY")
 
     def __repr__(self):
         return f"<State {self.name}>"
 
 
-class County(Place):
+class CountyNode(Place):
     fips = StringProperty(required=True, unique_index=True)
 
     # Relationships
-    state = RelationshipTo("State", "WITHIN_STATE")
-    cities = RelationshipTo("City", "HAS_CITY")
+    state = RelationshipTo("StateNode", "WITHIN_STATE")
+    cities = RelationshipTo("CityNode", "HAS_CITY")
 
     def __repr__(self):
         return f"<County {self.name}>"
 
 
-class City(Place):
+class CityNode(Place):
     population = StringProperty()
     sm_id = StringProperty(unique_index=True)  # SimpleMaps ID
 
     # Relationships
-    county = RelationshipTo("County", "WITHIN_COUNTY")
+    county = RelationshipTo("CountyNode", "WITHIN_COUNTY")
 
     def __repr__(self):
         return f"<City {self.name}>"
 
 
-class Precinct(Place):
+class PrecinctNode(Place):
     # Relationships
-    city = RelationshipFrom("City", "HAS_PRECINCT")
+    city = RelationshipFrom("CityNode", "HAS_PRECINCT")
 
     def __repr__(self):
         return f"<Precinct {self.name}>"

@@ -19,6 +19,9 @@ from models.attachment import Attachment
 from models.officer import Officer, StateID
 from models.agency import Unit, Agency
 from models.source import Source
+from models.infra.locations import (
+    StateNode, CountyNode, CityNode, PrecinctNode
+)
 
 cfg = dotenv_values(".env")
 
@@ -179,6 +182,25 @@ def detect_diff(item, incoming_data):
         if k not in ignore_fields and v is not None
     }
     return DeepDiff(existing_data, incoming_data_mapped, ignore_order=True)
+
+
+def link_location(item, state=None, county=None, city=None):
+    """
+    Link a node to the relevant location nodes.
+
+    :param item: The item to link
+    :param state: The state. Should be a two-letter State code or name.
+    :param county: The county. Should be a FIPS code or county name.
+    :param city: The city. Should be a SimpleMaps ID or city name.
+    """
+    if state:
+        state_node = StateNode.nodes.get_or_none(
+            abbreviation=state) or StateNode.nodes.get_or_none(name=state)
+        if state_node:
+            item.location.connect(state_node)
+            logging.info(f"Linked {item.uid} to State {state_node.uid}")
+        else:
+            logging.error(f"State not found: {state}")
 
 
 def update_item(item, incoming_data):
@@ -630,6 +652,7 @@ def load_unit(data):
 
     if u is None:
         u = Unit(**unit_data).save()
+
         u.agency.connect(a)
         a.units.connect(u)
         add_citation(u, source, data)

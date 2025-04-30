@@ -15,7 +15,7 @@ from neomodel.contrib.spatial_properties import NeomodelPoint
 
 
 from models.infra.locations import (
-    State, County, City,
+    StateNode, CountyNode, CityNode,
     STATE_INFO
 )
 
@@ -55,14 +55,14 @@ def insert_states():
 
     for abbreviation, info in STATE_INFO.items():
         # Check if the state already exists
-        existing_state = State.nodes.get_or_none(
+        existing_state = StateNode.nodes.get_or_none(
             abbreviation=abbreviation
         )
         if existing_state:
             logging.info(f"State {info['name']} already exists; skipping")
             continue
         try:
-            State(
+            StateNode(
                 name=info['name'],
                 abbreviation=abbreviation,
             ).save()
@@ -96,7 +96,7 @@ def insert_counties(data: csv.DictReader):
     # Second pass: upsert into Neo4j
     for info in counties.values():
         # 1) get or create the State
-        state = State.nodes.get(
+        state = StateNode.nodes.get(
             abbreviation=info["state_abbr"]
         )
         if not state:
@@ -104,13 +104,13 @@ def insert_counties(data: csv.DictReader):
             continue
 
         # 2) get or create the County
-        county = County.nodes.get_or_none(
+        county = CountyNode.nodes.get_or_none(
             fips=info["county_fips"]
         )
         if county:
             logging.info(f"County {info['county_name']} already exists; skipping")
             continue
-        county = County(
+        county = CountyNode(
             name=info["county_name"],
             fips=info["county_fips"],
         ).save()
@@ -139,23 +139,23 @@ def insert_cities(data: csv.DictReader):
         sm_id      = row["id"]  # if you later want to store or log it
 
         # 1) Lookup the State
-        state = State.nodes.get_or_none(abbreviation=state_abbr)
+        state = StateNode.nodes.get_or_none(abbreviation=state_abbr)
         if not state:
             logging.warning(f"[Cities] State {state_abbr} not found for {city_name}; skipping")
             continue
 
         # 2) Lookup the County by its FIPS
-        county = County.nodes.get_or_none(fips=county_fips)
+        county = CountyNode.nodes.get_or_none(fips=county_fips)
         if not county:
             logging.warning(f"[Cities] County FIPS {county_fips} not found for {city_name}; skipping")
             continue
 
         # 3) See if the City already exists
-        city = City.nodes.get_or_none(
+        city = CityNode.nodes.get_or_none(
             sm_id=sm_id
         )
         if not city:
-            city = City(
+            city = CityNode(
                 name=city_name,
                 coordinates=NeomodelPoint((lng, lat), crs="wgs-84"),
                 population=population,
