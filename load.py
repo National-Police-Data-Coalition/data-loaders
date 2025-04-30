@@ -193,12 +193,28 @@ def link_location(item, state=None, county=None, city=None):
     :param county: The county. Should be a FIPS code or county name.
     :param city: The city. Should be a SimpleMaps ID or city name.
     """
-    if state:
+    if state is not None:
         state_node = StateNode.nodes.get_or_none(
-            abbreviation=state) or StateNode.nodes.get_or_none(name=state)
+            abbreviation=state)
         if state_node:
-            item.location.connect(state_node)
+            item.state_node.connect(state_node)
             logging.info(f"Linked {item.uid} to State {state_node.uid}")
+
+            # Add county and city if provided
+            if city is not None:
+                query = """
+                MATCH (c:CityNode {name: $city})-[]-()-[]-(s:StateNode {uid: $state})
+                RETURN c LIMIT 25
+                """
+                results, meta = db.cypher_query(query, {
+                    "city": city,
+                    "state": state_node.uid
+                })
+                if results:
+                    city_node = CityNode.inflate(results[0][0])
+                    item.city_node.connect(city_node)
+                    logging.info(f"Linked {item.uid} to City {city_node.uid}")
+
         else:
             logging.error(f"State not found: {state}")
 
@@ -652,6 +668,11 @@ def load_unit(data):
 
     if u is None:
         u = Unit(**unit_data).save()
+        try:
+            link_location(u, state=u.state, city=u.city)
+        except Exception as e:
+            logging.error(f"Error linking location {u.name}: {e}")
+            return
 
         u.agency.connect(a)
         a.units.connect(u)
