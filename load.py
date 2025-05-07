@@ -19,6 +19,9 @@ from models.attachment import Attachment
 from models.officer import Officer, StateID
 from models.agency import Unit, Agency
 from models.source import Source
+from models.infra.locations import (
+    StateNode, CountyNode, CityNode, PrecinctNode
+)
 
 cfg = dotenv_values(".env")
 
@@ -179,6 +182,41 @@ def detect_diff(item, incoming_data):
         if k not in ignore_fields and v is not None
     }
     return DeepDiff(existing_data, incoming_data_mapped, ignore_order=True)
+
+
+def link_location(item, state=None, county=None, city=None):
+    """
+    Link a node to the relevant location nodes.
+
+    :param item: The item to link
+    :param state: The state. Should be a two-letter State code or name.
+    :param county: The county. Should be a FIPS code or county name.
+    :param city: The city. Should be a SimpleMaps ID or city name.
+    """
+    if state is not None:
+        state_node = StateNode.nodes.get_or_none(
+            abbreviation=state)
+        if state_node:
+            item.state_node.connect(state_node)
+            logging.info(f"Linked {item.uid} to State {state_node.uid}")
+
+            # Add county and city if provided
+            if city is not None:
+                query = """
+                MATCH (c:CityNode {name: $city})-[]-()-[]-(s:StateNode {uid: $state})
+                RETURN c LIMIT 25
+                """
+                results, meta = db.cypher_query(query, {
+                    "city": city,
+                    "state": state_node.uid
+                })
+                if results:
+                    city_node = CityNode.inflate(results[0][0])
+                    item.city_node.connect(city_node)
+                    logging.info(f"Linked {item.uid} to City {city_node.uid}")
+
+        else:
+            logging.error(f"State not found: {state}")
 
 
 def update_item(item, incoming_data):
@@ -584,6 +622,17 @@ def load_agency(data):
         a = Agency(**agency_data).save()
         add_citation(a, source, data)
         logging.info(f"Created Agency: {a.uid}")
+
+        # Link location
+        try:
+            link_location(
+                a,
+                state=a.hq_state,
+                city=a.hq_city,
+            )
+        except Exception as e:
+            logging.error(f"Error linking location {a.name}: {e}")
+
     else:
         logging.info(f"Found Agency {a.uid}")
         if source_outdated(a, source, data):
@@ -630,6 +679,12 @@ def load_unit(data):
 
     if u is None:
         u = Unit(**unit_data).save()
+        try:
+            link_location(u, state=u.state, city=u.city)
+        except Exception as e:
+            logging.error(f"Error linking location {u.name}: {e}")
+            return
+
         u.agency.connect(a)
         a.units.connect(u)
         add_citation(u, source, data)

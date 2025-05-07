@@ -2,3 +2,4 @@ pydantic
 neomodel
 deepdiff
 python-dotenv
+shapely

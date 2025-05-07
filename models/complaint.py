@@ -47,10 +47,6 @@ class ComplaintSourceRel(StructuredRel):
     reporting_agency_email = StringProperty()
 
 
-class PersonalSourceRel(BaseSourceRel):
-    pass
-
-
 class Location(StructuredNode):
     location_type = StringProperty()
     loocation_description = StringProperty()
