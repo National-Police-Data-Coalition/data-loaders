@@ -622,6 +622,17 @@ def load_agency(data):
         a = Agency(**agency_data).save()
         add_citation(a, source, data)
         logging.info(f"Created Agency: {a.uid}")
+
+        # Link location
+        try:
+            link_location(
+                a,
+                state=a.hq_state,
+                city=a.hq_city,
+            )
+        except Exception as e:
+            logging.error(f"Error linking location {a.name}: {e}")
+
     else:
         logging.info(f"Found Agency {a.uid}")
         if source_outdated(a, source, data):
