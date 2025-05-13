@@ -669,7 +669,7 @@ def load_unit(data):
         return
 
     # Find the agency node
-    agency_label = unit_data.pop("agency", None)
+    agency_label = data.get("agency", None)
     if agency_label is None:
         logging.error(f"No agency data found for unit {unit_data['name']}")
         return
