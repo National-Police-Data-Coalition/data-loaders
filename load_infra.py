@@ -133,10 +133,19 @@ def insert_cities(data: csv.DictReader):
         state_abbr  = row["state_id"]
         county_fips = row["county_fips"]
         city_name   = row["city"]
-        lat         = float(row["lat"])
-        lng         = float(row["lng"])
-        population  = row["population"]
-        sm_id      = row["id"]  # if you later want to store or log it
+        sm_id       = row["id"]
+        try:
+            lat     = float(row["lat"])
+            lng     = float(row["lng"])
+        except ValueError:
+            lat = 0.0
+            lng = 0.0
+            logging.error(f"[Cities] Coordinates for SMID:{sm_id} are not floats; setting to 0.0")
+        try:
+            population = int(row["population"])
+        except ValueError:
+            population = 0
+            logging.error(f"[Cities] Population for SMID:{sm_id} is not an integer; setting to 0")
 
         # 1) Lookup the State
         state = StateNode.nodes.get_or_none(abbreviation=state_abbr)
