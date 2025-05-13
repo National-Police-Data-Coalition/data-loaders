@@ -669,7 +669,7 @@ def load_unit(data):
         return
 
     # Find the agency node
-    agency_label = data.get("agency", None)
+    agency_label = unit_data.pop("agency", None)
     if agency_label is None:
         logging.error(f"No agency data found for unit {unit_data['name']}")
         return
@@ -691,15 +691,21 @@ def load_unit(data):
     commander_label = unit_data.pop("commander_uid", None)
 
     if u is None:
+        logging.info(f"Creating new unit: {unit_data['name']} under Agency {a.uid}")
         u = Unit(**unit_data).save()
+        try:
+            u.agency.connect(a)
+            a.units.connect(u)
+        except Exception as e:
+            logging.error(f"Error connecting unit to agency: {e}")
+            u.delete()
+            return
         try:
             link_location(u, state=u.state, city=u.city)
         except Exception as e:
             logging.error(f"Error linking location {u.name}: {e}")
             return
 
-        u.agency.connect(a)
-        a.units.connect(u)
         add_citation(u, source, data)
         logging.info(f"Created Unit: {u.uid}")
     else:
