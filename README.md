@@ -29,6 +29,19 @@ This repository contains a script (`load.py`) designed to process and load data 
 
 ## Usage
 
+### Loading the Infrastructure Nodes
+
+The NPDI Database Leverages Infrastructure nodes to support faster searching and traversal of the database. When building your database for the first time, you will need to add these nodes.
+
+```bash
+python load_infra.py <city_csv_file> [-l <logging_level>]
+```
+
+> [!NOTE]
+> The NPDI Leverages the United States Cities Database provided by Pareto Software to construct some of the required infrasstructure nodes. You can find this data at SimpleMaps.com.
+> https://simplemaps.com/data/us-cities
+
+
 ### Command-line Execution
 
 To run the script, use the following command:

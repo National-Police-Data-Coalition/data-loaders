@@ -19,6 +19,9 @@ from models.attachment import Attachment
 from models.officer import Officer, StateID
 from models.agency import Unit, Agency
 from models.source import Source
+from models.infra.locations import (
+    StateNode, CountyNode, CityNode, PrecinctNode
+)
 
 cfg = dotenv_values(".env")
 
@@ -181,6 +184,41 @@ def detect_diff(item, incoming_data):
     return DeepDiff(existing_data, incoming_data_mapped, ignore_order=True)
 
 
+def link_location(item, state=None, county=None, city=None):
+    """
+    Link a node to the relevant location nodes.
+
+    :param item: The item to link
+    :param state: The state. Should be a two-letter State code or name.
+    :param county: The county. Should be a FIPS code or county name.
+    :param city: The city. Should be a SimpleMaps ID or city name.
+    """
+    if state is not None:
+        state_node = StateNode.nodes.get_or_none(
+            abbreviation=state)
+        if state_node:
+            item.state_node.connect(state_node)
+            logging.info(f"Linked {item.uid} to State {state_node.uid}")
+
+            # Add county and city if provided
+            if city is not None:
+                query = """
+                MATCH (c:CityNode {name: $city})-[]-()-[]-(s:StateNode {uid: $state})
+                RETURN c LIMIT 25
+                """
+                results, meta = db.cypher_query(query, {
+                    "city": city,
+                    "state": state_node.uid
+                })
+                if results:
+                    city_node = CityNode.inflate(results[0][0])
+                    item.city_node.connect(city_node)
+                    logging.info(f"Linked {item.uid} to City {city_node.uid}")
+
+        else:
+            logging.error(f"State not found: {state}")
+
+
 def update_item(item, incoming_data):
     updates = {
         key: value
@@ -214,6 +252,8 @@ def add_citation(item, source, data, diff: dict = None):
 
 
 def find_via_citation(label, source):
+    logging.info(f"Finding {label} via citation")
+    logging.info(f"Source: {source.uid}")
     """
     Find a node by a citation from a source.
 
@@ -533,24 +573,35 @@ def load_officer(data):
         agency_label = employment_data.pop("agency_uid", None)
         if unit_label is None or agency_label is None:
             logging.error(f"Incomplete employment data for officer {o.uid}")
-            return
+            continue
         agency = identify_agency(agency_label)
         if agency is None:
             logging.error(f"Agency not found: {agency_label}")
-            return
-        u = identify_unit(unit_label, agency)
-        logging.info(f"Found Unit {u}")
-        if u is None:
-            logging.info(f"Unit not found: {unit_label}")
+            continue
+
+        # Check for a citation reference
+        if unit_label.startswith("$ref:"):
+            unit_ref = unit_label[5:]
             try:
-                u = Unit(name=unit_label).save()
-                u.agency.connect(agency)
-                agency.units.connect(u)
-                add_citation(u, source, data)
-                logging.info(f"Created Unit: {u.uid}")
+                result = find_via_citation(unit_ref, source)
+                u = Unit.inflate(result)
             except Exception as e:
-                logging.error(f"Error creating unit: {e}")
-                return
+                logging.error(f"Error finding unit by reference: {e}")
+                continue
+            if u is None:
+                logging.error(f"Unit not found: {unit_ref}")
+                missing.append(unit_ref)
+                continue
+        else:
+            # Find the unit node by name or UID
+            u = identify_unit(unit_label, agency)
+            if u is None:
+                if unit_label == "Unknown":
+                    u = Unit(name="Unknown").save()
+                    agency.units.connect(u)
+                    logging.info(f"Created Unit: {u.uid}")
+                logging.error(f"Unit not found: {unit_label}")
+                missing.append(unit_label)
 
         # See if the officer is already connected to the unit
         if o.units.is_connected(u):
@@ -584,6 +635,17 @@ def load_agency(data):
         a = Agency(**agency_data).save()
         add_citation(a, source, data)
         logging.info(f"Created Agency: {a.uid}")
+
+        # Link location
+        try:
+            link_location(
+                a,
+                state=a.hq_state,
+                city=a.hq_city,
+            )
+        except Exception as e:
+            logging.error(f"Error linking location {a.name}: {e}")
+
     else:
         logging.info(f"Found Agency {a.uid}")
         if source_outdated(a, source, data):
@@ -629,16 +691,27 @@ def load_unit(data):
     commander_label = unit_data.pop("commander_uid", None)
 
     if u is None:
+        logging.info(f"Creating new unit: {unit_data['name']} under Agency {a.uid}")
         u = Unit(**unit_data).save()
-        u.agency.connect(a)
-        a.units.connect(u)
+        try:
+            u.agency.connect(a)
+            a.units.connect(u)
+        except Exception as e:
+            logging.error(f"Error connecting unit to agency: {e}")
+            u.delete()
+            return
+        try:
+            link_location(u, state=u.state, city=u.city)
+        except Exception as e:
+            logging.error(f"Error linking location {u.name}: {e}")
+            return
+
         add_citation(u, source, data)
         logging.info(f"Created Unit: {u.uid}")
     else:
         logging.info(f"Found Unit {u.uid}")
         if source_outdated(u, source, data):
             logging.warning(f"Skipping outdated data for unit {u.uid}")
-            return
         else:
             diff = detect_diff(u, unit_data)
             if diff:
@@ -649,16 +722,25 @@ def load_unit(data):
 
     if commander_label:
         scrape_date = get_scrape_date(data).date()
-        c = Officer.nodes.get_or_none(uid=commander_label)
-        if c is None:
-            c = find_via_citation(commander_label, source)
-            if c is None:
-                logging.error(f"Commander not found: {commander_label}")
+        # Check for a citation reference
+        if commander_label.startswith("$ref:"):
+            commander_ref = commander_label[5:]
+            result = find_via_citation(commander_ref, source)
+            if result is None:
+                logging.error(f"Commander not found: {commander_ref}")
+                missing.append(commander_ref)
                 return
             try:
-                c = Officer.inflate(c)
+                c = Officer.inflate(result)
             except Exception as e:
                 logging.error(f"Error inflating commander: {e}")
+                return
+        else:
+            # Find the officer node by name or UID
+            c = Officer.nodes.get_or_none(uid=commander_label)
+            if c is None:
+                logging.error(f"Commander not found: {commander_label}")
+                missing.append(commander_label)
                 return
 
         # Confirm that the commmander is not already connected to the unit
