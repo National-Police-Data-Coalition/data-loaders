@@ -65,7 +65,6 @@ def identify_source(data):
     source_uid = data.get("source_uid")
     source = Source.nodes.get_or_none(uid=source_uid)
     if source is None:
-        logging.error(f"Source not found: {source_uid}")
         return None
     return source
 
@@ -82,7 +81,6 @@ def identify_agency(agency_label):
     if a is None:
         a = Agency.nodes.get_or_none(name=agency_label)
         if a is None:
-            logging.error(f"Agency not found: {agency_label}")
             return None
         else:
             logging.info(f"Found Agency {a.uid} by name: {agency_label}")
@@ -105,7 +103,6 @@ def identify_unit(unit_label, agency):
     if u is None:
         u = agency.units.get_or_none(name=unit_label)
         if u is None:
-            logging.error(f"Unit not found: {unit_label}")
             return None
         else:
             logging.info(f"Found Unit {u.uid} by name: {unit_label}")
@@ -305,7 +302,7 @@ def convert_string_to_date(date_string):
 
     :return: The date object
     """
-    if date_string is None:
+    if date_string is None or date_string.strip() == "":
         return None
     try:
         return datetime.strptime(date_string, "%Y-%m-%d").date()
@@ -576,7 +573,8 @@ def load_officer(data):
             continue
         agency = identify_agency(agency_label)
         if agency is None:
-            logging.error(f"Agency not found: {agency_label}")
+            logging.error(f"Agency not found: {agency_label} for officer {o.uid}")
+            missing.append(agency_label)
             continue
 
         # Check for a citation reference
@@ -599,9 +597,10 @@ def load_officer(data):
                 if unit_label == "Unknown":
                     u = Unit(name="Unknown").save()
                     agency.units.connect(u)
-                    logging.info(f"Created Unit: {u.uid}")
-                logging.error(f"Unit not found: {unit_label}")
-                missing.append(unit_label)
+                    logging.info(f"Created 'Unknown' unit for agency {agency.uid}")
+                else:
+                    logging.error(f"Unit not found: {unit_label}")
+                    missing.append(unit_label)
 
         # See if the officer is already connected to the unit
         if o.units.is_connected(u):
@@ -632,7 +631,12 @@ def load_agency(data):
 
     a = identify_agency(agency_data.get("name"))
     if a is None:
-        a = Agency(**agency_data).save()
+        logging.info(f"Agency -{agency_data.get("name")}- not found. Creating Agency ")
+        try:
+            a = Agency(**agency_data).save()
+        except Exception as e:
+            logging.error(f"Failed to create agency {agency_data}: {e}")
+            return
         add_citation(a, source, data)
         logging.info(f"Created Agency: {a.uid}")
 
