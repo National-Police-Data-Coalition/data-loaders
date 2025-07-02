@@ -38,7 +38,6 @@ class Officer(StructuredNode):
     suffix = StringProperty()
     ethnicity = StringProperty(choices=Ethnicity.choices())
     gender = StringProperty(choices=Gender.choices())
-    date_of_birth = DateProperty()
     year_of_birth = StringProperty()
 
     # Relationships

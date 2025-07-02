@@ -309,9 +309,9 @@ def convert_string_to_date(date_string):
     except ValueError:
         try:
             return datetime.strptime(date_string, "%B %Y").date()
-        except ValueError:
-            logging.error(f"Invalid date format: {date_string}")
-            return None
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid date format: {date_string}") from e
 
 
 def local_get_current_commander(unit):
@@ -449,12 +449,16 @@ def load_complaint(data):
     logging.info(f"Creating new complaint: {complaint_data['record_id']}")
 
     # Create Complaint
-    complaint_data['incident_date'] = convert_string_to_date(
-        complaint_data['incident_date'])
-    complaint_data['received_date'] = convert_string_to_date(
-        complaint_data['received_date'])
-    complaint_data['closed_date'] = convert_string_to_date(
-        complaint_data['closed_date'])
+    try:
+        complaint_data['incident_date'] = convert_string_to_date(
+            complaint_data['incident_date'])
+        complaint_data['received_date'] = convert_string_to_date(
+            complaint_data['received_date'])
+        complaint_data['closed_date'] = convert_string_to_date(
+            complaint_data['closed_date'])
+    except ValueError as e:
+        logging.error(f"Invalid date format in complaint data: {e}")
+        return
 
     try:
         complaint = Complaint(**complaint_data).save()
@@ -607,10 +611,16 @@ def load_officer(data):
             logging.info(f"Officer {o.uid} already connected to unit {u.uid}")
             continue
         logging.info(f"Found Unit {u.uid} for officer {o.uid}")
-        earliest_date = convert_string_to_date(
-            employment_data.get("earliest_date"))
-        latest_date = convert_string_to_date(
-            employment_data.get("latest_date"))
+        try:
+            earliest_date = convert_string_to_date(
+                employment_data.get_or_none("earliest_date"))
+        except ValueError as e:
+            logging.error(f"Invalid earliest_date format for officer {o.uid}: {e}")
+        try:
+            latest_date = convert_string_to_date(
+                employment_data.get_or_none("latest_date"))
+        except ValueError as e:
+            logging.error(f"Invalid latest_date format for officer {o.uid}: {e}")
         u.officers.connect(
             o,
             {
