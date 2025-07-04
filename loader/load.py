@@ -25,8 +25,11 @@ from models.infra.locations import (
 
 cfg = dotenv_values(".env")
 
-log_path = "_load.log"
-log_path = datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + log_path
+log_dir = "logs"
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+log_end = "_load.log"
+log_path = log_dir + "/" + datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + log_end
 
 logging.basicConfig(
     filename=log_path,
@@ -824,6 +827,14 @@ def main():
             return
         logging.getLogger().setLevel(log_level)
 
+    # Verify Neo4j connection
+    try:
+        db.cypher_query("RETURN 1")
+    except Exception as e:
+        logging.error(f"Failed to connect to Neo4j: {e}")
+        print(f"Failed to connect to Neo4j: {e}", file=sys.stderr)
+        sys.exit(1)
+
     jsonl_filename = args.input_file
     max_workers = args.workers
 
@@ -844,4 +855,4 @@ if __name__ == "__main__":
     start_time = time.time()
     main()
     end_time = time.time()
-    print(end_time - start_time)
+    print(f"Completed in {end_time - start_time} seconds")
