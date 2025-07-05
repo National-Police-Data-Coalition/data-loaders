@@ -167,5 +167,6 @@ cython_debug/
 
 # Local JSONL files and datasets
 datasets/
+logs/
 *.jsonl
 .log
