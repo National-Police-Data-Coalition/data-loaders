@@ -600,6 +600,7 @@ def load_officer(data):
                 if unit_label == "Unknown":
                     u = Unit(name="Unknown").save()
                     agency.units.connect(u)
+                    u.agency.connect(agency)
                     logging.info(f"Created 'Unknown' unit for agency {agency.uid}")
                 else:
                     logging.error(f"Unit not found: {unit_label}")
