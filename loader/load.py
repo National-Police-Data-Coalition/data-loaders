@@ -23,7 +23,7 @@ from models.infra.locations import (
     StateNode, CountyNode, CityNode, PrecinctNode
 )
 
-cfg = dotenv_values(".env")
+cfg = dotenv_values(".env.cloud")
 
 log_dir = "logs"
 if not os.path.exists(log_dir):

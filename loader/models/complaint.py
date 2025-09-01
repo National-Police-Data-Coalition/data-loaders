@@ -71,7 +71,7 @@ class Complaint(StructuredNode):
     # Relationships
     source_org = RelationshipTo("models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
     location = RelationshipTo("Location", "OCCURRED_AT")
-    civlian_witnesses = RelationshipFrom("models.civilian.Civilian", "WITNESSED")
+    civilian_witnesses = RelationshipFrom("models.civilian.Civilian", "WITNESSED")
     police_witnesses = RelationshipFrom("models.officer.Officer", "WITNESSED")
     attachments = RelationshipTo("models.attachment.Attachment", "ATTACHED_TO")
     allegations = RelationshipTo("Allegation", "ALLEGED")
