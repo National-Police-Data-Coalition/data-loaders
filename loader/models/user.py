@@ -1,12 +1,12 @@
 """Define the SQL classes for Users."""
 
-from models.types.enums import PropertyEnum
+from loader.models.types.enums import PropertyEnum
 from neomodel import (
     Relationship, StructuredNode,
     StringProperty, DateProperty, BooleanProperty,
     UniqueIdProperty, EmailProperty
 )
-from models.source import SourceMember
+from loader.models.source import SourceMember
 
 
 class UserRole(str, PropertyEnum):
@@ -55,16 +55,16 @@ class User(StructuredNode):
 
     # Data Source Relationships
     sources = Relationship(
-        'models.source.Source',
+        'loader.models.source.Source',
         "MEMBER_OF_SOURCE", model=SourceMember)
     received_invitations = Relationship(
-        'models.source.Invitation',
+        'loader.models.source.Invitation',
         "RECIEVED")
     extended_invitations = Relationship(
-        'models.source.Invitation',
+        'loader.models.source.Invitation',
         "EXTENDED")
     entended_staged_invitations = Relationship(
-        'models.source.StagedInvitation',
+        'loader.models.source.StagedInvitation',
         "EXTENDED")
 
     @property

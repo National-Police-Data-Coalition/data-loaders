@@ -14,12 +14,12 @@ from neomodel import config, db, DeflateError
 from neomodel.contrib.spatial_properties import NeomodelPoint
 
 
-from models.infra.locations import (
+from loader.models.infra.locations import (
     StateNode, CountyNode, CityNode,
     STATE_INFO
 )
 
-cfg = dotenv_values(".env")
+cfg = dotenv_values(".env.cloud")
 
 log_path = "_loc.log"
 log_path = datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + log_path
