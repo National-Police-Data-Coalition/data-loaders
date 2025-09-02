@@ -1,57 +1,96 @@
-import os
-import sys
-import json
-import argparse
-import logging
+import os, sys, logging
+import json, argparse
 import threading
 
-from dotenv import dotenv_values
+from dotenv import dotenv_values, load_dotenv
 from datetime import datetime
 import time
 from deepdiff import DeepDiff
 from neomodel import config, db, DeflateError
-from models.complaint import (
+from loader.models.complaint import (
     Complaint, Allegation, Penalty,
     Location
 )
-from models.civilian import Civilian
-from models.attachment import Attachment
-from models.officer import Officer, StateID
-from models.agency import Unit, Agency
-from models.source import Source
-from models.infra.locations import (
+from loader.models.civilian import Civilian
+from loader.models.attachment import Attachment
+from loader.models.officer import Officer, StateID
+from loader.models.agency import Unit, Agency
+from loader.models.source import Source
+from loader.models.infra.locations import (
     StateNode, CountyNode, CityNode, PrecinctNode
 )
 
-cfg = dotenv_values(".env")
+# Load .env if present
+load_dotenv()
 
-log_dir = "logs"
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
-log_end = "_load.log"
-log_path = log_dir + "/" + datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + log_end
-
-logging.basicConfig(
-    filename=log_path,
-    level=logging.ERROR,
-    format='%(asctime)s %(threadName)s %(levelname)s: %(message)s')
+def parse_bool(s: str | None, default=False) -> bool:
+    if s is None:
+        return default
+    return s.lower() in ("1", "true", "yes", "y", "on")
 
 
-LOGGING_LEVELS = [
-    "DEBUG",
-    "INFO",
-    "WARNING",
-    "ERROR",
-    "CRITICAL"
-]
+def env(name:str, default: str | None = None) -> str | None:
+    """Read from environment; fallback to default."""
+    return os.getenv(name, default)
+
+def setup_logging(level_name: str = None):
+    """
+    Configure logging with stdout handler by default.
+    Optionally add a file handler if LOG_TO_FILE=true.
+    Env:
+      LOG_LEVEL=INFO|DEBUG|...  (default ERROR unless overridden by CLI)
+      LOG_TO_FILE=true|false     (default false)
+      LOG_DIR=/work/logs         (default logs)
+    """
+    # Resolve level: CLI overrides env; env overrides default
+    env_level = env("LOG_LEVEL", "ERROR").upper()
+    level_name = (level_name or env_level).upper()
+    level = getattr(logging, level_name, logging.ERROR)
+
+    log_to_file = parse_bool(env("LOG_TO_FILE"), default=False)
+    log_dir = env("LOG_DIR", "logs")
+
+    fmt = "%(asctime)s %(threadName)s %(levelname)s: %(message)s"
+    formatter = logging.Formatter(fmt)
+
+    root = logging.getLogger()
+    root.setLevel(level)
+
+    # Clear existing handlers
+    root.handlers.clear()
+
+    # Console handler
+    sh = logging.StreamHandler(sys.stdout)
+    sh.setLevel(level)
+    sh.setFormatter(formatter)
+    root.addHandler(sh)
+
+    # File handler
+    if log_to_file:
+        os.makedirs(log_dir, exist_ok=True)
+        # Avoid ':' in filenames (bad on Windows hosts)
+        ts = datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        log_path = os.path.join(log_dir, f"{ts}_load.log")
+        fh = logging.FileHandler(log_path, encoding="utf-8")
+        fh.setLevel(level)
+        fh.setFormatter(formatter)
+        root.addHandler(fh)
+        logging.info("File logging enabled: %s", log_path)
 
 # Neomodel setup
-neo_url = "bolt://{user}:{pw}@{uri}".format(
-    user=cfg.get("GRAPH_USER"),
-    pw=cfg.get("GRAPH_PASSWORD"),
-    uri=cfg.get("GRAPH_NM_URI")
-)
-config.DATABASE_URL = neo_url
+database_url = env("DATABASE_URL")
+if not database_url:
+    # Fallback to separate parts
+    user = env("GRAPH_USER", "neo4j")
+    password = env("GRAPH_PASSWORD")
+    uri = env("GRAPH_NM_URI")
+    scheme = env("GRAPH_SCHEME", "bolt")
+    if not all([user, password, uri]):
+        logging.error("Missing one or more environment variables for Neo4j connection.")
+        sys.exit(1)
+    database_url = f"{scheme}://{user}:{password}@{uri}"
+
+config.DATABASE_URL = database_url
 
 # Missing Data log
 missing = []
@@ -644,7 +683,7 @@ def load_agency(data):
 
     a = identify_agency(agency_data.get("name"))
     if a is None:
-        logging.info(f"Agency -{agency_data.get("name")}- not found. Creating Agency ")
+        logging.info(f"Agency -{agency_data.get('name')}- not found. Creating Agency ")
         try:
             a = Agency(**agency_data).save()
         except Exception as e:
@@ -789,6 +828,7 @@ def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
     if not os.path.exists(jsonl_filename):
         logging.error(f"File {jsonl_filename} does not exist.")
         return
+    logging.info(f"Loading data from {jsonl_filename} with {max_workers} workers.")
 
     def process_line(line, lock):
         data = json.loads(line)
@@ -796,13 +836,26 @@ def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
 
         with lock:
             if model == "officer":
-                load_officer(data)
+                try:
+                    load_officer(data)
+                except Exception as e:
+                    logging.error(f"Error processing officer data: {e}")
             elif model == "unit":
-                load_unit(data)
+                logging.info(f"Processing unit data: {data}")
+                try:
+                    load_unit(data)
+                except Exception as e:
+                    logging.error(f"Error processing unit data: {e}")
             elif model == "complaint":
-                load_complaint(data)
+                try:
+                    load_complaint(data)
+                except Exception as e:
+                    logging.error(f"Error processing complaint data: {e}")
             elif model == "agency":
-                load_agency(data)
+                try:
+                    load_agency(data)
+                except Exception as e:
+                    logging.error(f"Error processing agency data: {e}")
             else:
                 logging.error(f"Unknown model: {model}")
 
@@ -836,16 +889,19 @@ def main():
 
     args = parser.parse_args()
 
+
     if args.logging:
-        log_level = args.logging.upper()
-        if log_level not in LOGGING_LEVELS:
-            logging.error(f"Invalid logging level: {log_level}")
-            return
-        logging.getLogger().setLevel(log_level)
+        if args.logging.upper() not in {"DEBUG","INFO","WARNING","ERROR","CRITICAL"}:
+            logging.error("Invalid logging level: %s", args.logging)
+            sys.exit(2)
+    setup_logging(args.logging)
+
+    logging.info("Starting data load process")
 
     # Verify Neo4j connection
     try:
         db.cypher_query("RETURN 1")
+        logging.info("Successfully connected to Neo4j")
     except Exception as e:
         logging.error(f"Failed to connect to Neo4j: {e}")
         print(f"Failed to connect to Neo4j: {e}", file=sys.stderr)
@@ -864,7 +920,6 @@ def main():
         print(f"Processing complete. Missing refs written to {output_path}")
     except Exception as e:
         print(f"Error writing to the output file: {e}", file=sys.stderr)
-        sys.exit(1)
 
 
 if __name__ == "__main__":

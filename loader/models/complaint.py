@@ -1,6 +1,6 @@
 """Define the Classes for Complaints."""
-from models.types.enums import PropertyEnum
-from models.source import Citation
+from loader.models.types.enums import PropertyEnum
+from loader.models.source import Citation
 from neomodel import (
     StructuredNode,
     StructuredRel,
@@ -69,13 +69,13 @@ class Complaint(StructuredNode):
     outcome_of_contact = StringProperty()
 
     # Relationships
-    source_org = RelationshipTo("models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
+    source_org = RelationshipTo("loader.models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
     location = RelationshipTo("Location", "OCCURRED_AT")
-    civilian_witnesses = RelationshipTo("models.civilian.Civilian", "WITNESSED")
-    police_witnesses = RelationshipTo("models.officer.Officer", "WITNESSED")
-    attachments = RelationshipTo("models.attachment.Attachment", "ATTACHED_TO")
+    civilian_witnesses = RelationshipTo("loader.models.civilian.Civilian", "WITNESSED")
+    police_witnesses = RelationshipTo("loader.models.officer.Officer", "WITNESSED")
+    attachments = RelationshipTo("loader.models.attachment.Attachment", "ATTACHED_TO")
     citations = RelationshipTo(
-        'models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.models.source.Source', "UPDATED_BY", model=Citation)
     # civilian_review_board = RelationshipFrom("CivilianReviewBoard", "REVIEWED")
 
     def __repr__(self):
@@ -95,8 +95,8 @@ class Allegation(StructuredNode):
     outcome = StringProperty()
 
     # Relationships
-    complainant = RelationshipTo("models.civilian.Civilian", "REPORTED_BY")
-    accused = Relationship("models.officer.Officer", "ACCUSED_OF")
+    complainant = RelationshipTo("loader.models.civilian.Civilian", "REPORTED_BY")
+    accused = Relationship("loader.models.officer.Officer", "ACCUSED_OF")
     complaint = Relationship("Complaint", "ALLEGED")
 
     def __repr__(self):
@@ -110,7 +110,7 @@ class Investigation(StructuredNode):
     end_date = DateProperty()
 
     # Relationships
-    investigator = Relationship("models.officer.Officer", "LED_BY")
+    investigator = Relationship("loader.models.officer.Officer", "LED_BY")
     complaint = Relationship("Complaint", "EXAMINED_BY")
 
     def __repr__(self):
@@ -128,7 +128,7 @@ class Penalty(StructuredNode):
     agency_disposition = StringProperty()
 
     # Relationships
-    officer = Relationship("models.officer.Officer", "RECEIVED")
+    officer = Relationship("loader.models.officer.Officer", "RECEIVED")
     complaint = Relationship("Complaint", "RESULTS_IN")
 
     def __repr__(self):

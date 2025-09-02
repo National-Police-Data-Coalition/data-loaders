@@ -1,5 +1,5 @@
 """Define the Classes for Civilians."""
-from models.types.enums import Ethnicity, Gender
+from loader.models.types.enums import Ethnicity, Gender
 from neomodel import (
     StructuredNode,
     StringProperty,

@@ -1,5 +1,5 @@
 from __future__ import annotations  # allows type hinting of class itself
-from models.types.enums import PropertyEnum
+from loader.models.types.enums import PropertyEnum
 from datetime import datetime
 from neomodel import (
     StructuredNode, StructuredRel,
@@ -37,9 +37,9 @@ class Invitation(StructuredNode):
 
     source_org = RelationshipFrom("Source", "INVITED_TO")
     user = RelationshipFrom(
-        "models.user.User", "EXTENDED_TO")
+        "loader.models.user.User", "EXTENDED_TO")
     extender = RelationshipFrom(
-        "models.user.User", "EXTENDED_BY")
+        "loader.models.user.User", "EXTENDED_BY")
 
     def serialize(self):
         return {
@@ -58,7 +58,7 @@ class StagedInvitation(StructuredNode):
 
     source_org = RelationshipFrom("Source", "INVITATION_TO")
     extender = RelationshipFrom(
-        "models.user.User", "EXTENDED_BY")
+        "loader.models.user.User", "EXTENDED_BY")
 
     def serialize(self):
         return {
@@ -141,7 +141,7 @@ class Source(StructuredNode):
 
     # Relationships
     members = RelationshipFrom(
-        "models.user.User",
+        "loader.models.user.User",
         "IS_MEMBER", model=SourceMember)
     invitations = RelationshipTo(
         "Invitation", "HAS_PENDING_INVITATION")

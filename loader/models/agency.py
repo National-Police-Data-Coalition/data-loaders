@@ -1,9 +1,9 @@
 from datetime import date
-from utils.query import RelQuery
-from models.types.enums import State, PropertyEnum
-from models.infra.locations import StateNode, CountyNode, CityNode
-from models.source import Citation
-from models.officer import Officer
+from loader.utils.query import RelQuery
+from loader.models.types.enums import State, PropertyEnum
+from loader.models.infra.locations import StateNode, CountyNode, CityNode
+from loader.models.source import Citation
+from loader.models.officer import Officer
 
 from neomodel import (
     StructuredNode,
@@ -11,7 +11,6 @@ from neomodel import (
     StringProperty,
     Relationship,
     RelationshipTo,
-    RelationshipFrom,
     DateProperty,
     UniqueIdProperty,
     One,
@@ -53,15 +52,15 @@ class Unit(StructuredNode):
     # Relationships
     agency = Relationship("Agency", "ESTABLISHED_BY", cardinality=One)
     commanders = Relationship(
-        "models.officer.Officer",
+        "loader.models.officer.Officer",
         "COMMANDED_BY", model=UnitMembership)
     officers = Relationship(
-        "models.officer.Officer",
+        "loader.models.officer.Officer",
         "MEMBER_OF_UNIT", model=UnitMembership)
     citations = RelationshipTo(
-        'models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.models.source.Source', "UPDATED_BY", model=Citation)
     city_node = RelationshipTo(
-        "models.infra.locations.CityNode", "WITHIN_CITY")
+        "loader.models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Unit {self.name}>"
@@ -142,9 +141,9 @@ class Agency(StructuredNode):
 
     # Relationships
     citations = RelationshipTo(
-        'models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.models.source.Source', "UPDATED_BY", model=Citation)
     city_node = RelationshipTo(
-        "models.infra.locations.CityNode", "WITHIN_CITY")
+        "loader.models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Agency {self.name}>"

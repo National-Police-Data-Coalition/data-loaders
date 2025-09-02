@@ -14,7 +14,7 @@ from neomodel import config, db, DeflateError
 from neomodel.contrib.spatial_properties import NeomodelPoint
 
 
-from models.infra.locations import (
+from loader.models.infra.locations import (
     StateNode, CountyNode, CityNode,
     STATE_INFO
 )

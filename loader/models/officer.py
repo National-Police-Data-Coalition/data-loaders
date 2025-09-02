@@ -1,5 +1,5 @@
-from models.types.enums import State, Ethnicity, Gender
-from models.source import Citation
+from loader.models.types.enums import State, Ethnicity, Gender
+from loader.models.source import Citation
 
 from neomodel import (
     StructuredNode,
@@ -43,7 +43,7 @@ class Officer(StructuredNode):
 
     # Relationships
     citations = RelationshipTo(
-        'models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.models.source.Source', "UPDATED_BY", model=Citation)
 
     def __repr__(self):
         return f"<Officer {self.id}>"

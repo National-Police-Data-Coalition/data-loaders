@@ -1,4 +1,4 @@
-from models.types.enums import PropertyEnum
+from loader.models.types.enums import PropertyEnum
 from neomodel import (
     StructuredNode,
     StringProperty,
