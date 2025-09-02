@@ -18,7 +18,7 @@ class StateID(StructuredNode):
     id_name = StringProperty()  # e.g. "Tax ID Number"
     state = StringProperty(choices=State.choices())  # e.g. "NY"
     value = StringProperty()  # e.g. "958938"
-    officer = RelationshipFrom('Officer', "HAS_STATE_ID", cardinality=One)
+    officer = Relationship('Officer', "HAS_STATE_ID", cardinality=One)
 
     def __repr__(self):
         return f"<StateID: Officer {self.officer_id}, {self.state}>"
@@ -42,17 +42,6 @@ class Officer(StructuredNode):
     year_of_birth = StringProperty()
 
     # Relationships
-    state_ids = RelationshipTo('StateID', "HAS_STATE_ID")
-    units = RelationshipTo(
-        'models.agency.Unit', "MEMBER_OF_UNIT")
-    litigation = Relationship(
-        'models.litigation.Litigation', "NAMED_IN")
-    allegations = Relationship(
-        'models.complaint.Allegation', "ACCUSED_OF")
-    investigations = Relationship(
-        'models.complaint.Investigation', "LEAD_BY")
-    commands = Relationship(
-        'models.agency.Unit', "COMMANDS")
     citations = RelationshipTo(
         'models.source.Source', "UPDATED_BY", model=Citation)
 

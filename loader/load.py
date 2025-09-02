@@ -23,7 +23,7 @@ from models.infra.locations import (
     StateNode, CountyNode, CityNode, PrecinctNode
 )
 
-cfg = dotenv_values(".env.cloud")
+cfg = dotenv_values(".env")
 
 log_dir = "logs"
 if not os.path.exists(log_dir):
@@ -102,16 +102,19 @@ def identify_unit(unit_label, agency):
 
     :return: The Unit node or None
     """
-    u = agency.units.get_or_none(uid=unit_label)
-    if u is None:
-        u = agency.units.get_or_none(name=unit_label)
+    try:
+        u = agency.units.filter("u.uid = $unit_uid", unit_uid=unit_label).one_or_none()
         if u is None:
-            return None
-        else:
-            logging.info(f"Found Unit {u.uid} by name: {unit_label}")
-            logging.warning(
-                "Using unit name to find unit is not recommended." +
-                " Use UID instead.")
+            u = agency.units.filter("u.name = $unit_name", unit_name=unit_label).one_or_none()
+            if u is None:
+                return None
+            else:
+                logging.info(f"Found Unit {u.uid} by name: {unit_label}")
+                logging.warning(
+                    "Using unit name to find unit is not recommended." +
+                    " Use UID instead.")
+    except ValueError as e:
+        raise ValueError(f"Multiple Matching Units found for {unit_label}: {e}")
     return u
 
 
@@ -184,7 +187,7 @@ def detect_diff(item, incoming_data):
     return DeepDiff(existing_data, incoming_data_mapped, ignore_order=True)
 
 
-def link_location(item, state=None, county=None, city=None):
+def link_location(item, state=None, city=None):
     """
     Link a node to the relevant location nodes.
 
@@ -197,13 +200,10 @@ def link_location(item, state=None, county=None, city=None):
         state_node = StateNode.nodes.get_or_none(
             abbreviation=state)
         if state_node:
-            item.state_node.connect(state_node)
-            logging.info(f"Linked {item.uid} to State {state_node.uid}")
-
             # Add county and city if provided
             if city is not None:
                 query = """
-                MATCH (c:CityNode {name: $city})-[]-()-[]-(s:StateNode {uid: $state})
+                MATCH (c:CityNode {name: $city})-[]-(:CountyNode)-[]-(s:StateNode {uid: $state})
                 RETURN c LIMIT 25
                 """
                 results, meta = db.cypher_query(query, {
@@ -214,7 +214,6 @@ def link_location(item, state=None, county=None, city=None):
                     city_node = CityNode.inflate(results[0][0])
                     item.city_node.connect(city_node)
                     logging.info(f"Linked {item.uid} to City {city_node.uid}")
-
         else:
             logging.error(f"State not found: {state}")
 
@@ -509,13 +508,23 @@ def load_complaint(data):
     for a_data in allegations:
         a = create_allegation(a_data, source)
         if a is not None:
-            complaint.allegations.connect(a)
+            a.complaint.connect(complaint)
+        else:
+            logging.error("Failed to create allegation ({}): {}".format(
+                json.dumps(a_data),
+                e
+            ))
 
     # Create Penalties
     for p_data in penalties:
         p = create_penalty(p_data, source)
         if p is not None:
-            complaint.penalties.connect(p)
+            p.complaint.connect(complaint)
+        else:
+            logging.error("Failed to create penalty ({}): {}".format(
+                json.dumps(p_data),
+                e
+            ))
 
     return
 
@@ -607,7 +616,7 @@ def load_officer(data):
                     missing.append(unit_label)
 
         # See if the officer is already connected to the unit
-        if o.units.is_connected(u):
+        if u.officers.is_connected(o):
             logging.info(f"Officer {o.uid} already connected to unit {u.uid}")
             continue
         logging.info(f"Found Unit {u.uid} for officer {o.uid}")
@@ -684,6 +693,7 @@ def load_unit(data):
     # UID Search
     a = Agency.nodes.get_or_none(uid=agency_label)
     if a is None:
+        logging.info(f"Agency UID not found: {agency_label}. Trying name search.")
         a = Agency.nodes.get_or_none(name=agency_label)
         if a is None:
             logging.error(f"Agency not found: {agency_label}")
@@ -694,8 +704,14 @@ def load_unit(data):
                 "Using agency name to find agency is not recommended." +
                 " Use UID instead.")
 
+    logging.info(f"Found Agency {a.uid} for unit {unit_data['name']}")
     # Check for an existing unit
-    u = a.units.get_or_none(name=unit_data["name"])
+    try:
+        u = identify_unit(unit_data.get("name"), a)
+    except ValueError as e:
+        logging.error(f"Unable to create unit {unit_data['name']} for agency {a.uid}: {e}")
+        return
+
     commander_label = unit_data.pop("commander_uid", None)
 
     if u is None:
@@ -703,7 +719,6 @@ def load_unit(data):
         u = Unit(**unit_data).save()
         try:
             u.agency.connect(a)
-            a.units.connect(u)
         except Exception as e:
             logging.error(f"Error connecting unit to agency: {e}")
             u.delete()

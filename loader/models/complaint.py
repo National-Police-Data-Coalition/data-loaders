@@ -6,7 +6,7 @@ from neomodel import (
     StructuredRel,
     StringProperty,
     RelationshipTo,
-    RelationshipFrom,
+    Relationship,
     DateProperty,
     UniqueIdProperty
 )
@@ -71,12 +71,9 @@ class Complaint(StructuredNode):
     # Relationships
     source_org = RelationshipTo("models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
     location = RelationshipTo("Location", "OCCURRED_AT")
-    civilian_witnesses = RelationshipFrom("models.civilian.Civilian", "WITNESSED")
-    police_witnesses = RelationshipFrom("models.officer.Officer", "WITNESSED")
+    civilian_witnesses = RelationshipTo("models.civilian.Civilian", "WITNESSED")
+    police_witnesses = RelationshipTo("models.officer.Officer", "WITNESSED")
     attachments = RelationshipTo("models.attachment.Attachment", "ATTACHED_TO")
-    allegations = RelationshipTo("Allegation", "ALLEGED")
-    investigations = RelationshipTo("Investigation", "EXAMINED_BY")
-    penalties = RelationshipTo("Penalty", "RESULTS_IN")
     citations = RelationshipTo(
         'models.source.Source', "UPDATED_BY", model=Citation)
     # civilian_review_board = RelationshipFrom("CivilianReviewBoard", "REVIEWED")
@@ -99,8 +96,8 @@ class Allegation(StructuredNode):
 
     # Relationships
     complainant = RelationshipTo("models.civilian.Civilian", "REPORTED_BY")
-    accused = RelationshipFrom("models.officer.Officer", "ACCUSED_OF")
-    complaint = RelationshipFrom("Complaint", "ALLEGED")
+    accused = Relationship("models.officer.Officer", "ACCUSED_OF")
+    complaint = Relationship("Complaint", "ALLEGED")
 
     def __repr__(self):
         """Represent instance as a unique string."""
@@ -113,8 +110,8 @@ class Investigation(StructuredNode):
     end_date = DateProperty()
 
     # Relationships
-    investigator = RelationshipFrom("models.officer.Officer", "LED_BY")
-    complaint = RelationshipFrom("Complaint", "EXAMINED_BY")
+    investigator = Relationship("models.officer.Officer", "LED_BY")
+    complaint = Relationship("Complaint", "EXAMINED_BY")
 
     def __repr__(self):
         """Represent instance as a unique string."""
@@ -131,8 +128,8 @@ class Penalty(StructuredNode):
     agency_disposition = StringProperty()
 
     # Relationships
-    officer = RelationshipFrom("models.officer.Officer", "RECEIVED")
-    complaint = RelationshipFrom("Complaint", "RESULTS_IN")
+    officer = Relationship("models.officer.Officer", "RECEIVED")
+    complaint = Relationship("Complaint", "RESULTS_IN")
 
     def __repr__(self):
         """Represent instance as a unique string."""

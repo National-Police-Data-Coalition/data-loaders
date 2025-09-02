@@ -1,4 +1,5 @@
 from datetime import date
+from utils.query import RelQuery
 from models.types.enums import State, PropertyEnum
 from models.infra.locations import StateNode, CountyNode, CityNode
 from models.source import Citation
@@ -51,18 +52,14 @@ class Unit(StructuredNode):
 
     # Relationships
     agency = Relationship("Agency", "ESTABLISHED_BY", cardinality=One)
-    commander = Relationship(
-        "backend.database.models.officer.Officer",
+    commanders = Relationship(
+        "models.officer.Officer",
         "COMMANDED_BY", model=UnitMembership)
     officers = Relationship(
-        "backend.database.models.officer.Officer",
+        "models.officer.Officer",
         "MEMBER_OF_UNIT", model=UnitMembership)
     citations = RelationshipTo(
-        'backend.database.models.source.Source', "UPDATED_BY", model=Citation)
-    state_node = RelationshipTo(
-        "models.infra.locations.StateNode", "WITHIN_STATE")
-    county_node = RelationshipTo(
-        "models.infra.locations.CountyNode", "WITHIN_COUNTY")
+        'models.source.Source', "UPDATED_BY", model=Citation)
     city_node = RelationshipTo(
         "models.infra.locations.CityNode", "WITHIN_CITY")
 
@@ -146,12 +143,21 @@ class Agency(StructuredNode):
     # Relationships
     citations = RelationshipTo(
         'models.source.Source', "UPDATED_BY", model=Citation)
-    state_node = RelationshipTo(
-        "models.infra.locations.StateNode", "WITHIN_STATE")
-    county_node = RelationshipTo(
-        "models.infra.locations.CountyNode", "WITHIN_COUNTY")
     city_node = RelationshipTo(
         "models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Agency {self.name}>"
+
+    @property
+    def units(self) -> RelQuery:
+        """
+        Query the units related to this agency.
+        Returns:
+            RelQuery: A query object for the Unit nodes associated
+            with this agency.
+        """
+        base = """
+        MATCH (a:Agency {uid: $owner_uid})-[:ESTABLISHED_BY]-(u:Unit)
+        """
+        return RelQuery(self, base, return_alias="u", inflate_cls=Unit)
