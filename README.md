@@ -12,7 +12,7 @@ This repository contains a script (`load.py`) designed to process and load data 
 
 1. **Python Dependencies**: Install required libraries using:
    ```bash
-   pip install -r loader/requirements.txt
+   pip install -r requirements.txt
    ```
    Ensure `dotenv`, `deepdiff`, `neomodel`, and `argparse` are installed.
 
@@ -34,7 +34,7 @@ This repository contains a script (`load.py`) designed to process and load data 
 The NPDI Database Leverages Infrastructure nodes to support faster searching and traversal of the database. When building your database for the first time, you will need to add these nodes.
 
 ```bash
-python loader/load_infra.py <city_csv_file> [-l <logging_level>]
+python -m loader.load_infra <city_csv_file> [-l <logging_level>]
 ```
 
 > [!NOTE]
@@ -47,7 +47,7 @@ python loader/load_infra.py <city_csv_file> [-l <logging_level>]
 To run the script, use the following command:
 
 ```bash
-python loader/load.py <input_file> [-l <logging_level>]
+python -m loader.load <input_file> [-l <logging_level>]
 ```
 
 - `<input_file>`: Path to the JSONL file to process.
@@ -56,7 +56,7 @@ python loader/load.py <input_file> [-l <logging_level>]
 ### Example
 
 ```bash
-python loader/load.py datasets/input.jsonl -l DEBUG
+python -m loader.load datasets/input.jsonl -l DEBUG
 ```
 
 ### Output
