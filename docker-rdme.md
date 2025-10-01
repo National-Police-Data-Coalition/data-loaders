@@ -15,7 +15,7 @@ This step runs the container as a one-off process, passing in your local JSONL f
 
 ```bash
 docker run \
-  -e DATABASE_URL="bolt://neo4j:Vm*i.a3ip9B.6Q@host.docker.internal:7687" \
+  -e DATABASE_URL="bolt://neo4j:**********@host.docker.internal:7687" \
   -v "$(pwd)/datasets/source/input.jsonl:/datasets/input.jsonl:ro" \
   jsonl-loader /datasets/input.jsonl -w 8 -l INFO
 
