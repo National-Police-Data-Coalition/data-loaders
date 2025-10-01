@@ -19,10 +19,10 @@ from loader.models.infra.locations import (
     STATE_INFO
 )
 
-cfg = dotenv_values(".env.cloud")
+cfg = dotenv_values(".env")
 
 log_path = "_loc.log"
-log_path = datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + log_path
+log_path = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + log_path
 
 logging.basicConfig(
     filename=log_path,

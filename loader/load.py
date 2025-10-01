@@ -913,7 +913,7 @@ def main():
     load_jsonl_to_neo4j(jsonl_filename, max_workers)
 
     output_path = "_missing.log"
-    output_path = datetime.now().strftime("%Y-%m-%d:%H:%M:%S") + output_path
+    output_path = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + output_path
     try:
         with open(output_path, 'w') as output_file:
             output_file.write('\n'.join(missing))
