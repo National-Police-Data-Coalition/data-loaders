@@ -1,12 +1,12 @@
 """Define the Classes for Complaints."""
-from models.types.enums import PropertyEnum
-from models.source import Citation
+from loader.models.types.enums import PropertyEnum
+from loader.models.source import Citation
 from neomodel import (
     StructuredNode,
     StructuredRel,
     StringProperty,
     RelationshipTo,
-    RelationshipFrom,
+    Relationship,
     DateProperty,
     UniqueIdProperty
 )
@@ -69,16 +69,13 @@ class Complaint(StructuredNode):
     outcome_of_contact = StringProperty()
 
     # Relationships
-    source_org = RelationshipTo("models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
+    source_org = RelationshipTo("loader.models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
     location = RelationshipTo("Location", "OCCURRED_AT")
-    civlian_witnesses = RelationshipFrom("models.civilian.Civilian", "WITNESSED")
-    police_witnesses = RelationshipFrom("models.officer.Officer", "WITNESSED")
-    attachments = RelationshipTo("models.attachment.Attachment", "ATTACHED_TO")
-    allegations = RelationshipTo("Allegation", "ALLEGED")
-    investigations = RelationshipTo("Investigation", "EXAMINED_BY")
-    penalties = RelationshipTo("Penalty", "RESULTS_IN")
+    civilian_witnesses = RelationshipTo("loader.models.civilian.Civilian", "WITNESSED")
+    police_witnesses = RelationshipTo("loader.models.officer.Officer", "WITNESSED")
+    attachments = RelationshipTo("loader.models.attachment.Attachment", "ATTACHED_TO")
     citations = RelationshipTo(
-        'models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.models.source.Source', "UPDATED_BY", model=Citation)
     # civilian_review_board = RelationshipFrom("CivilianReviewBoard", "REVIEWED")
 
     def __repr__(self):
@@ -98,9 +95,9 @@ class Allegation(StructuredNode):
     outcome = StringProperty()
 
     # Relationships
-    complainant = RelationshipTo("models.civilian.Civilian", "REPORTED_BY")
-    accused = RelationshipFrom("models.officer.Officer", "ACCUSED_OF")
-    complaint = RelationshipFrom("Complaint", "ALLEGED")
+    complainant = RelationshipTo("loader.models.civilian.Civilian", "REPORTED_BY")
+    accused = Relationship("loader.models.officer.Officer", "ACCUSED_OF")
+    complaint = Relationship("Complaint", "ALLEGED")
 
     def __repr__(self):
         """Represent instance as a unique string."""
@@ -113,8 +110,8 @@ class Investigation(StructuredNode):
     end_date = DateProperty()
 
     # Relationships
-    investigator = RelationshipFrom("models.officer.Officer", "LED_BY")
-    complaint = RelationshipFrom("Complaint", "EXAMINED_BY")
+    investigator = Relationship("loader.models.officer.Officer", "LED_BY")
+    complaint = Relationship("Complaint", "EXAMINED_BY")
 
     def __repr__(self):
         """Represent instance as a unique string."""
@@ -131,8 +128,8 @@ class Penalty(StructuredNode):
     agency_disposition = StringProperty()
 
     # Relationships
-    officer = RelationshipFrom("models.officer.Officer", "RECEIVED")
-    complaint = RelationshipFrom("Complaint", "RESULTS_IN")
+    officer = Relationship("loader.models.officer.Officer", "RECEIVED")
+    complaint = Relationship("Complaint", "RESULTS_IN")
 
     def __repr__(self):
         """Represent instance as a unique string."""

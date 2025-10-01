@@ -1,18 +1,20 @@
 from datetime import date
-from models.types.enums import State, PropertyEnum
-from models.infra.locations import StateNode, CountyNode, CityNode
-from models.source import Citation
-from models.officer import Officer
+from loader.utils.query import RelQuery
+from loader.models.types.enums import State, PropertyEnum
+from loader.models.infra.locations import StateNode, CountyNode, CityNode
+from loader.models.source import Citation
+from loader.models.officer import Officer
 
 from neomodel import (
     StructuredNode,
     StructuredRel,
     StringProperty,
+    Relationship,
     RelationshipTo,
-    RelationshipFrom,
     DateProperty,
     UniqueIdProperty,
-    One
+    One,
+    db
 )
 
 
@@ -45,46 +47,63 @@ class Unit(StructuredNode):
     zip = StringProperty()
     agency_url = StringProperty()
     officers_url = StringProperty()
-    date_etsablished = DateProperty()
+    date_established = DateProperty()
 
     # Relationships
-    agency = RelationshipTo("Agency", "ESTABLISHED_BY", cardinality=One)
-    commanders = RelationshipTo(
-        "models.officer.Officer",
+    agency = Relationship("Agency", "ESTABLISHED_BY", cardinality=One)
+    commanders = Relationship(
+        "loader.models.officer.Officer",
         "COMMANDED_BY", model=UnitMembership)
-    officers = RelationshipFrom(
-        "models.officer.Officer",
+    officers = Relationship(
+        "loader.models.officer.Officer",
         "MEMBER_OF_UNIT", model=UnitMembership)
     citations = RelationshipTo(
-        'models.source.Source', "UPDATED_BY", model=Citation)
-    state_node = RelationshipTo(
-        "models.infra.locations.StateNode", "WITHIN_STATE")
-    county_node = RelationshipTo(
-        "models.infra.locations.CountyNode", "WITHIN_COUNTY")
+        'loader.models.source.Source', "UPDATED_BY", model=Citation)
     city_node = RelationshipTo(
-        "models.infra.locations.CityNode", "WITHIN_CITY")
+        "loader.models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Unit {self.name}>"
 
-    def get_current_commander(self):
+    @property
+    def primary_source(self):
         """
-        Get the current commander of a unit.
+        Get the primary source for this unit.
+        Returns:
+            Source: The primary source node for this unit.
+        """
+        cy = """
+        MATCH (o:Unit {uid: $uid})-[r:UPDATED_BY]->(s:Source)
+        RETURN s
+        ORDER BY r.date DESC
+        LIMIT 1;
+        """
+        result, meta = db.cypher_query(cy, {'uid': self.uid}, resolve_objects=True)
+        if result:
+            source_node = result[0][0]
+            return source_node
+        return None
 
-        :param unit: The unit to get the commander for
-
-        :return: The current commander
+    @property
+    def current_commander(self):
         """
-        query = """
-        MATCH (u:Unit {uid: $unit_uid})-[r:COMMANDED_BY]->(o:Officer)
-        WHERE r.latest_date IS NULL
-        RETURN o
+        Get the current commander of the unit.
+        Returns:
+            Officer: The current commander of the unit.
         """
-        results, meta = self.cypher(query, {
-            "unit_uid": self.uid
-        })
-        if results:
-            return Officer.inflate(results[0][0])
+        cy = """
+        MATCH (u:Unit {uid: $uid})-[r:COMMANDED_BY]-(o:Officer)
+        WITH u, r, o,
+            CASE WHEN r.latest_date IS NULL THEN 1 ELSE 0 END AS isCurrent
+        ORDER BY isCurrent DESC, r.earliest_date DESC
+        RETURN o AS officer
+        LIMIT 1;
+        """
+        result, meta = db.cypher_query(
+            cy, {'uid': self.uid}, resolve_objects=True)
+        if result:
+            officer_node = result[0][0]
+            return officer_node
         return None
 
     def update_commander(self, officer: Officer, date: date):
@@ -121,15 +140,23 @@ class Agency(StructuredNode):
     jurisdiction = StringProperty(choices=Jurisdiction.choices())
 
     # Relationships
-    units = RelationshipTo("Unit", "ESTABLISHED")
     citations = RelationshipTo(
-        'models.source.Source', "UPDATED_BY", model=Citation)
-    state_node = RelationshipTo(
-        "models.infra.locations.StateNode", "WITHIN_STATE")
-    county_node = RelationshipTo(
-        "models.infra.locations.CountyNode", "WITHIN_COUNTY")
+        'loader.models.source.Source', "UPDATED_BY", model=Citation)
     city_node = RelationshipTo(
-        "models.infra.locations.CityNode", "WITHIN_CITY")
+        "loader.models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Agency {self.name}>"
+
+    @property
+    def units(self) -> RelQuery:
+        """
+        Query the units related to this agency.
+        Returns:
+            RelQuery: A query object for the Unit nodes associated
+            with this agency.
+        """
+        base = """
+        MATCH (a:Agency {uid: $owner_uid})-[:ESTABLISHED_BY]-(u:Unit)
+        """
+        return RelQuery(self, base, return_alias="u", inflate_cls=Unit)
