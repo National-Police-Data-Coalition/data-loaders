@@ -559,12 +559,6 @@ def load_complaint(data):
     # )
     complaint = identify_complaint(record_id=complaint_data['record_id'], source=source)
     if complaint is not None:
-        try:
-            complaint = Complaint.inflate(complaint)
-        except Exception as e:
-            logging.error(f"Error inflating complaint: {e}")
-            return
-        logging.info(f"Updating complaint {complaint.uid}")
         # Check if the incoming data is more recent than the existing data
         if not source_outdated(complaint, source, data):
             diff = detect_diff(complaint, complaint_data)
