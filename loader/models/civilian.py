@@ -9,7 +9,8 @@ from neomodel import (
 
 
 class Civilian(StructuredNode):
+    civ_id = StringProperty()
     age = IntegerProperty()
-    age_group = StringProperty()
+    age_range = StringProperty()
     ethnicity = StringProperty(choices=Ethnicity.choices())
     gender = StringProperty(choices=Gender.choices())

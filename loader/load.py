@@ -3,7 +3,7 @@ import json, argparse
 import threading
 
 from dotenv import dotenv_values, load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 from deepdiff import DeepDiff
 from neomodel import config, db, DeflateError
@@ -69,7 +69,7 @@ def setup_logging(level_name: str = None):
     if log_to_file:
         os.makedirs(log_dir, exist_ok=True)
         # Avoid ':' in filenames (bad on Windows hosts)
-        ts = datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
         log_path = os.path.join(log_dir, f"{ts}_load.log")
         fh = logging.FileHandler(log_path, encoding="utf-8")
         fh.setLevel(level)
@@ -156,6 +156,34 @@ def identify_unit(unit_label, agency):
         raise ValueError(f"Multiple Matching Units found for {unit_label}: {e}")
     return u
 
+
+def identify_complaint(record_id, source):
+    """
+    Identify the complaint node by record ID and source.
+
+    :param record_id: The record ID of the complaint
+    :param source: The source of the complaint
+
+    :return: The Complaint node or None
+    """
+    query = """
+    MATCH (s:Source {uid: $source_uid})-[:HAS_SOURCE]-(c:Complaint)
+    WHERE c.record_id = $c_record_id
+    RETURN c
+    """
+    results, meta = db.cypher_query(query, {
+        "c_record_id": record_id,
+        "source_uid": source.uid
+    })
+    if results:
+        if len(results) > 1:
+            logging.warning(
+                "Found multiple complaints with Record ID {} from {}".format(
+                    record_id,
+                    source.uid
+                ))
+        return Complaint.inflate(results[0][0])
+    return None
 
 def get_scrape_date(data):
     """
@@ -451,6 +479,65 @@ def create_penalty(data, source):
     return p
 
 
+def load_allegation(data):
+    allegation_data = data.get("data", {})
+    officer_id_data = data.get("officer_state_id", {})
+    complaint_id = data.get("complaint_id", None)
+
+    source = identify_source(data)
+    if source is None:
+        logging.error(f"Source not found: {data.get('source')}")
+        return
+    
+    # Find the officer
+    sid = StateID.nodes.get_or_none(
+        id_name=officer_id_data.get('id_name', None),
+        state=officer_id_data.get('state', None),
+        value=officer_id_data.get('value', None)
+    )
+    if sid is None:
+        logging.error(f"State ID not found: {officer_id_data}")
+        return
+    
+    o = sid.officer.single()
+    if o is None:
+        logging.error(f"Officer not found for State ID: {officer_id_data}")
+        return
+    
+    # Find the complaint
+    if complaint_id is None:
+        logging.error("No complaint ID provided for allegation.")
+        return
+    c = identify_complaint(complaint_id, source)
+    if c is None:
+        logging.error(f"Complaint not found: {complaint_id}")
+        return
+    
+    # Create the allegation
+    # Drop the officer UID from the allegation data
+    allegation_data.pop('accused_uid', None)
+    complainant_data = allegation_data.pop('complainant', None)
+    try:
+        a = Allegation(**allegation_data).save()
+    except DeflateError as e:
+        logging.error(f"Failed to create allegation {allegation_data}: {e}")
+        return
+    a.accused.connect(o)
+    a.complaint.connect(c)
+
+    if complainant_data:
+        try:
+            civ = Civilian(**complainant_data).save()
+            a.complainant.connect(civ)
+        except DeflateError as e:
+            logging.error(f"Failed to create civilian {complainant_data}: {e}")
+    
+    # Add citation
+    add_citation(c, source, data)
+
+    return
+
+
 def load_complaint(data):
     complaint_data = data.get("data", {})
     source_details = complaint_data.pop('source_details', {})
@@ -464,17 +551,14 @@ def load_complaint(data):
     if source is None:
         logging.error(f"Source not found: {data.get('source')}")
         return
-    complaint = find_via_citation(
-        data.get("url"),
-        source
-    )
+    ### Find existing complaint
+    ### Citations won't work here because the data source is a CSV file
+    # complaint = find_via_citation(
+    #     data.get("url"),
+    #     source
+    # )
+    complaint = identify_complaint(record_id=complaint_data['record_id'], source=source)
     if complaint is not None:
-        try:
-            complaint = Complaint.inflate(complaint)
-        except Exception as e:
-            logging.error(f"Error inflating complaint: {e}")
-            return
-        logging.info(f"Updating complaint {complaint.uid}")
         # Check if the incoming data is more recent than the existing data
         if not source_outdated(complaint, source, data):
             diff = detect_diff(complaint, complaint_data)
@@ -851,6 +935,11 @@ def load_jsonl_to_neo4j(jsonl_filename, max_workers=4):
                     load_complaint(data)
                 except Exception as e:
                     logging.error(f"Error processing complaint data: {e}")
+            elif model == "allegation":
+                try:
+                    load_allegation(data)
+                except Exception as e:
+                    logging.error(f"Error processing allegation data: {e}")
             elif model == "agency":
                 try:
                     load_agency(data)
