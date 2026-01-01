@@ -6,15 +6,15 @@ from loader.models.source import Citation
 from loader.models.officer import Officer
 
 from neomodel import (
-    StructuredNode,
-    StructuredRel,
+    AsyncStructuredNode,
+    AsyncStructuredRel,
     StringProperty,
-    Relationship,
-    RelationshipTo,
+    AsyncRelationship,
+    AsyncRelationshipTo,
     DateProperty,
     UniqueIdProperty,
     One,
-    db
+    adb
 )
 
 
@@ -27,14 +27,14 @@ class Jurisdiction(str, PropertyEnum):
     OTHER = "OTHER"
 
 
-class UnitMembership(StructuredRel):
+class UnitMembership(AsyncStructuredRel):
     earliest_date = DateProperty()
     latest_date = DateProperty()
     badge_number = StringProperty()
     highest_rank = StringProperty()
 
 
-class Unit(StructuredNode):
+class Unit(AsyncStructuredNode):
     uid = UniqueIdProperty()
     name = StringProperty()
     website_url = StringProperty()
@@ -50,23 +50,22 @@ class Unit(StructuredNode):
     date_established = DateProperty()
 
     # Relationships
-    agency = Relationship("Agency", "ESTABLISHED_BY", cardinality=One)
-    commanders = Relationship(
+    agency = AsyncRelationship("Agency", "ESTABLISHED_BY", cardinality=One)
+    commanders = AsyncRelationship(
         "loader.models.officer.Officer",
         "COMMANDED_BY", model=UnitMembership)
-    officers = Relationship(
+    officers = AsyncRelationship(
         "loader.models.officer.Officer",
         "MEMBER_OF_UNIT", model=UnitMembership)
-    citations = RelationshipTo(
+    citations = AsyncRelationshipTo(
         'loader.models.source.Source', "UPDATED_BY", model=Citation)
-    city_node = RelationshipTo(
+    city_node = AsyncRelationshipTo(
         "loader.models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Unit {self.name}>"
 
-    @property
-    def primary_source(self):
+    async def get_primary_source(self):
         """
         Get the primary source for this unit.
         Returns:
@@ -78,14 +77,13 @@ class Unit(StructuredNode):
         ORDER BY r.date DESC
         LIMIT 1;
         """
-        result, meta = db.cypher_query(cy, {'uid': self.uid}, resolve_objects=True)
+        result, meta = await adb.cypher_query(cy, {'uid': self.uid}, resolve_objects=True)
         if result:
             source_node = result[0][0]
             return source_node
         return None
 
-    @property
-    def current_commander(self):
+    async def get_current_commander(self):
         """
         Get the current commander of the unit.
         Returns:
@@ -99,7 +97,7 @@ class Unit(StructuredNode):
         RETURN o AS officer
         LIMIT 1;
         """
-        result, meta = db.cypher_query(
+        result, meta = await adb.cypher_query(
             cy, {'uid': self.uid}, resolve_objects=True)
         if result:
             officer_node = result[0][0]
@@ -126,7 +124,7 @@ class Unit(StructuredNode):
         })
 
 
-class Agency(StructuredNode):
+class Agency(AsyncStructuredNode):
     uid = UniqueIdProperty()
     name = StringProperty()
     website_url = StringProperty()
@@ -140,16 +138,15 @@ class Agency(StructuredNode):
     jurisdiction = StringProperty(choices=Jurisdiction.choices())
 
     # Relationships
-    citations = RelationshipTo(
+    citations = AsyncRelationshipTo(
         'loader.models.source.Source', "UPDATED_BY", model=Citation)
-    city_node = RelationshipTo(
+    city_node = AsyncRelationshipTo(
         "loader.models.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Agency {self.name}>"
 
-    @property
-    def units(self) -> RelQuery:
+    def get_units(self) -> RelQuery:
         """
         Query the units related to this agency.
         Returns:

@@ -2,7 +2,7 @@
 
 from loader.models.types.enums import PropertyEnum
 from neomodel import (
-    Relationship, StructuredNode,
+    AsyncRelationship, AsyncStructuredNode,
     StringProperty, DateProperty, BooleanProperty,
     UniqueIdProperty, EmailProperty
 )
@@ -27,7 +27,7 @@ class UserRole(str, PropertyEnum):
 
 
 # Define the User data-model.
-class User(StructuredNode):
+class User(AsyncStructuredNode):
     __hidden_properties__ = ["password_hash"]
     __property_order__ = [
         "uid", "first_name", "last_name",
@@ -54,16 +54,16 @@ class User(StructuredNode):
     phone_number = StringProperty()
 
     # Data Source Relationships
-    sources = Relationship(
+    sources = AsyncRelationship(
         'loader.models.source.Source',
         "MEMBER_OF_SOURCE", model=SourceMember)
-    received_invitations = Relationship(
+    received_invitations = AsyncRelationship(
         'loader.models.source.Invitation',
         "RECIEVED")
-    extended_invitations = Relationship(
+    extended_invitations = AsyncRelationship(
         'loader.models.source.Invitation',
         "EXTENDED")
-    entended_staged_invitations = Relationship(
+    entended_staged_invitations = AsyncRelationship(
         'loader.models.source.StagedInvitation',
         "EXTENDED")
 
@@ -77,7 +77,7 @@ class User(StructuredNode):
         return UserRole(self.role)
 
     @classmethod
-    def get_by_email(cls, email: str) -> "User":
+    async def get_by_email(cls, email: str) -> "User":
         """
         Get a user by their email address.
 
@@ -88,6 +88,6 @@ class User(StructuredNode):
             User: The User instance if found, otherwise None.
         """
         try:
-            return cls.nodes.get_or_none(email=email)
+            return await cls.nodes.get_or_none(email=email)
         except cls.DoesNotExist:
             return None

@@ -1,8 +1,8 @@
 from loader.models.types.enums import PropertyEnum
 from neomodel import (
-    StructuredNode,
+    AsyncStructuredNode,
     StringProperty,
-    RelationshipTo,
+    AsyncRelationshipTo,
     DateProperty,
     UniqueIdProperty
 )
@@ -23,7 +23,7 @@ class CourtLevel(str, PropertyEnum):
     US_SUPREME_COURT = "U.S. Supreme"
 
 
-class Litigation(StructuredNode):
+class Litigation(AsyncStructuredNode):
     uid = UniqueIdProperty()
     case_title = StringProperty()
     docket_number = StringProperty()
@@ -39,22 +39,22 @@ class Litigation(StructuredNode):
     case_type = StringProperty(choices=LegalCaseType.choices())
 
     # Relationships
-    documents = RelationshipTo("Document", "RELATED_TO")
-    dispositions = RelationshipTo("Disposition", "YIELDED")
-    defendants = RelationshipTo("Officer", "NAMED_IN")
+    documents = AsyncRelationshipTo("Document", "RELATED_TO")
+    dispositions = AsyncRelationshipTo("Disposition", "YIELDED")
+    defendants = AsyncRelationshipTo("Officer", "NAMED_IN")
 
     def __repr__(self):
         return f"<Litigation {self.uid}:{self.case_title}>"
 
 
-class Document(StructuredNode):
+class Document(AsyncStructuredNode):
     uid = UniqueIdProperty()
     title = StringProperty()
     description = StringProperty()
     url = StringProperty()
 
 
-class Disposition(StructuredNode):
+class Disposition(AsyncStructuredNode):
     description = StringProperty()
     date = DateProperty()
     disposition = StringProperty()

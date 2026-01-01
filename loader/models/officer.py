@@ -2,14 +2,14 @@ from loader.models.types.enums import State, Ethnicity, Gender
 from loader.models.source import Citation
 
 from neomodel import (
-    StructuredNode,
-    RelationshipTo, RelationshipFrom, Relationship,
+    AsyncStructuredNode,
+    AsyncRelationshipTo, AsyncRelationshipFrom, AsyncRelationship,
     StringProperty, DateProperty,
     UniqueIdProperty, One
 )
 
 
-class StateID(StructuredNode):
+class StateID(AsyncStructuredNode):
     """
     Represents a Statewide ID that follows an offcier even as they move between
     law enforcement agencies. For example, in New York, this would be
@@ -18,13 +18,13 @@ class StateID(StructuredNode):
     id_name = StringProperty()  # e.g. "Tax ID Number"
     state = StringProperty(choices=State.choices())  # e.g. "NY"
     value = StringProperty()  # e.g. "958938"
-    officer = Relationship('Officer', "HAS_STATE_ID", cardinality=One)
+    officer = AsyncRelationship('Officer', "HAS_STATE_ID", cardinality=One)
 
     def __repr__(self):
         return f"<StateID: Officer {self.officer_id}, {self.state}>"
 
 
-class Officer(StructuredNode):
+class Officer(AsyncStructuredNode):
     __property_order__ = [
         "uid", "first_name", "middle_name",
         "last_name", "suffix", "ethnicity",
@@ -42,7 +42,7 @@ class Officer(StructuredNode):
     year_of_birth = StringProperty()
 
     # Relationships
-    citations = RelationshipTo(
+    citations = AsyncRelationshipTo(
         'loader.models.source.Source', "UPDATED_BY", model=Citation)
 
     def __repr__(self):

@@ -2,8 +2,8 @@ from __future__ import annotations  # allows type hinting of class itself
 from loader.models.types.enums import PropertyEnum
 from datetime import datetime
 from neomodel import (
-    StructuredNode, StructuredRel,
-    RelationshipTo, RelationshipFrom,
+    AsyncStructuredNode, AsyncStructuredRel,
+    AsyncRelationshipTo, AsyncRelationshipFrom,
     StringProperty, DateTimeProperty,
     UniqueIdProperty, BooleanProperty,
     EmailProperty, JSONProperty
@@ -29,16 +29,16 @@ class MemberRole(str, PropertyEnum):
             return 5
 
 
-class Invitation(StructuredNode):
+class Invitation(AsyncStructuredNode):
     uid = UniqueIdProperty()
     role = StringProperty(choices=MemberRole.choices())
     is_accepted = BooleanProperty(default=False)
     # default to not accepted invite
 
-    source_org = RelationshipFrom("Source", "INVITED_TO")
-    user = RelationshipFrom(
+    source_org = AsyncRelationshipFrom("Source", "INVITED_TO")
+    user = AsyncRelationshipFrom(
         "loader.models.user.User", "EXTENDED_TO")
-    extender = RelationshipFrom(
+    extender = AsyncRelationshipFrom(
         "loader.models.user.User", "EXTENDED_BY")
 
     def serialize(self):
@@ -51,13 +51,13 @@ class Invitation(StructuredNode):
         }
 
 
-class StagedInvitation(StructuredNode):
+class StagedInvitation(AsyncStructuredNode):
     uid = UniqueIdProperty()
     role = StringProperty(choices=MemberRole.choices())
     email = EmailProperty()
 
-    source_org = RelationshipFrom("Source", "INVITATION_TO")
-    extender = RelationshipFrom(
+    source_org = AsyncRelationshipFrom("Source", "INVITATION_TO")
+    extender = AsyncRelationshipFrom(
         "loader.models.user.User", "EXTENDED_BY")
 
     def serialize(self):
@@ -69,7 +69,7 @@ class StagedInvitation(StructuredNode):
         }
 
 
-class SourceMember(StructuredRel):
+class SourceMember(AsyncStructuredRel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -103,7 +103,7 @@ class SourceMember(StructuredRel):
         id={self.uid}>"
 
 
-class Citation(StructuredRel):
+class Citation(AsyncStructuredRel):
     uid = UniqueIdProperty()
     date = DateTimeProperty(default=datetime.now())
     url = StringProperty(required=True)
@@ -128,7 +128,7 @@ class Citation(StructuredRel):
     #     self.save()
 
 
-class Source(StructuredNode):
+class Source(AsyncStructuredNode):
     __property_order__ = [
         "uid", "name", "url",
         "contact_email"
@@ -140,12 +140,12 @@ class Source(StructuredNode):
     contact_email = StringProperty(required=True)
 
     # Relationships
-    members = RelationshipFrom(
+    members = AsyncRelationshipFrom(
         "loader.models.user.User",
         "IS_MEMBER", model=SourceMember)
-    invitations = RelationshipTo(
+    invitations = AsyncRelationshipTo(
         "Invitation", "HAS_PENDING_INVITATION")
-    staged_invitations = RelationshipTo(
+    staged_invitations = AsyncRelationshipTo(
         "StagedInvitation", "PENDING_STAGED_INVITATION")
 
     def __repr__(self):
