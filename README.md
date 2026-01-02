@@ -47,16 +47,18 @@ python -m loader.load_infra <city_csv_file> [-l <logging_level>]
 To run the script, use the following command:
 
 ```bash
-python -m loader.load <input_file> [-l <logging_level>]
+python -m loader.cli load <input_file> [-l <logging_level>]
 ```
 
 - `<input_file>`: Path to the JSONL file to process.
 - `-l <logging_level>` (optional): Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+- `--batch-size <size>` (optional): Number of records to process in each batch (default is 500).
+- `--stop-on-error` (optional): Stop processing on the first error encountered.
 
 ### Example
 
 ```bash
-python -m loader.load datasets/input.jsonl -l DEBUG
+python -m loader.cli load datasets/input.jsonl -l DEBUG
 ```
 
 ### Output

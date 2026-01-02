@@ -1,4 +1,4 @@
-from loader.models.types.enums import PropertyEnum
+from loader.domain.types.enums import PropertyEnum
 from neomodel import (
     AsyncStructuredNode,
     StringProperty,

@@ -1,5 +1,5 @@
-from loader.models.types.enums import State, Ethnicity, Gender
-from loader.models.source import Citation
+from loader.domain.types.enums import State, Ethnicity, Gender
+from loader.domain.source import Citation
 
 from neomodel import (
     AsyncStructuredNode,

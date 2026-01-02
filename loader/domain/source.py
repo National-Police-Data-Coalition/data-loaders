@@ -1,5 +1,5 @@
 from __future__ import annotations  # allows type hinting of class itself
-from loader.models.types.enums import PropertyEnum
+from loader.domain.types.enums import PropertyEnum
 from datetime import datetime
 from neomodel import (
     AsyncStructuredNode, AsyncStructuredRel,
@@ -104,9 +104,12 @@ class SourceMember(AsyncStructuredRel):
 
 
 class Citation(AsyncStructuredRel):
-    uid = UniqueIdProperty()
-    date = DateTimeProperty(default=datetime.now())
-    url = StringProperty(required=True)
+    timestamp = DateTimeProperty(
+        default=datetime.now(),
+        index=True
+    )
+    url = StringProperty()
+    user_uid = StringProperty()
     diff = JSONProperty()
 
     def __repr__(self):

@@ -1,12 +1,12 @@
 """Define the SQL classes for Users."""
 
-from loader.models.types.enums import PropertyEnum
+from loader.domain.types.enums import PropertyEnum
 from neomodel import (
     AsyncRelationship, AsyncStructuredNode,
     StringProperty, DateProperty, BooleanProperty,
     UniqueIdProperty, EmailProperty
 )
-from loader.models.source import SourceMember
+from loader.domain.source import SourceMember
 
 
 class UserRole(str, PropertyEnum):

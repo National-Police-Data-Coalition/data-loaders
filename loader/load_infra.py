@@ -12,7 +12,7 @@ from neomodel import config, adb
 from neomodel.contrib.spatial_properties import NeomodelPoint
 
 
-from loader.models.infra.locations import (
+from loader.domain.infra.locations import (
     StateNode, CountyNode, CityNode,
     STATE_INFO
 )

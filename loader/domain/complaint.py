@@ -1,6 +1,6 @@
 """Define the Classes for Complaints."""
-from loader.models.types.enums import PropertyEnum
-from loader.models.source import Citation
+from loader.domain.types.enums import PropertyEnum
+from loader.domain.source import Citation
 from neomodel import (
     AsyncStructuredNode,
     AsyncStructuredRel,

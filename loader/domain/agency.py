@@ -1,9 +1,9 @@
 from datetime import date
 from loader.utils.query import RelQuery
-from loader.models.types.enums import State, PropertyEnum
-from loader.models.infra.locations import StateNode, CountyNode, CityNode
-from loader.models.source import Citation
-from loader.models.officer import Officer
+from loader.domain.types.enums import State, PropertyEnum
+from loader.domain.infra.locations import StateNode, CountyNode, CityNode
+from loader.domain.source import Citation
+from loader.domain.officer import Officer
 
 from neomodel import (
     AsyncStructuredNode,
@@ -126,7 +126,7 @@ class Unit(AsyncStructuredNode):
 
 class Agency(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    name = StringProperty()
+    name = StringProperty(unique_index=True)
     website_url = StringProperty()
     hq_address = StringProperty()
     hq_city = StringProperty()
@@ -141,7 +141,7 @@ class Agency(AsyncStructuredNode):
     citations = AsyncRelationshipTo(
         'loader.models.source.Source', "UPDATED_BY", model=Citation)
     city_node = AsyncRelationshipTo(
-        "loader.models.infra.locations.CityNode", "WITHIN_CITY")
+        "loader.models.infra.locations.CityNode", "LOCATED_IN")
 
     def __repr__(self):
         return f"<Agency {self.name}>"
