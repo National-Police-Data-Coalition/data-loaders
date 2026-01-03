@@ -126,14 +126,14 @@ class Unit(AsyncStructuredNode):
 
 class Agency(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    name = StringProperty(unique_index=True)
-    website_url = StringProperty()
+    name = StringProperty(required=True)
+    hq_state = StringProperty(choices=State.choices(), required=True)
     hq_address = StringProperty()
     hq_city = StringProperty()
-    hq_state = StringProperty(choices=State.choices())
     hq_zip = StringProperty()
     phone = StringProperty()
     email = StringProperty()
+    website_url = StringProperty()
     description = StringProperty()
     jurisdiction = StringProperty(choices=Jurisdiction.choices())
 
