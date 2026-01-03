@@ -1,7 +1,8 @@
 from __future__ import annotations
+
+import json
 from typing import Any
 from neomodel import adb
-from datetime import datetime, timezone
 from .base import register
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
@@ -9,7 +10,7 @@ from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 PREFETCH_CYPHER = """
 UNWIND $rows AS row
-OPTIONAL MATCH (a:Agency {name: row.name})
+OPTIONAL MATCH (a:Agency {name: row.name, hq_state: row.hq_state})
 MATCH (s:Source {uid: row.source_uid})
 OPTIONAL MATCH (a)-[c:UPDATED_BY]->(s)
 WHERE c.user_uid IS NULL            // ignore user-created updates
@@ -24,7 +25,7 @@ RETURN
 UPSERT_CYPHER = """
 UNWIND $rows AS row
 MATCH (s:Source {uid: row.source_uid})
-MERGE (a:Agency {name: row.name})
+MERGE (a:Agency {name: row.name, hq_state: row.hq_state})
 SET a += row.props
 
 MERGE (a)-[cit:UPDATED_BY {
@@ -171,7 +172,7 @@ async def upsert_agency_batch(batch: list[dict[str, Any]]) -> None:
 
         to_apply.append({
             **base_apply,
-            "diff": diff.to_dict(),
+            "diff": json.loads(diff.to_json()),
         })
 
     if not to_apply:
