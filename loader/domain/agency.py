@@ -36,17 +36,15 @@ class UnitMembership(AsyncStructuredRel):
 
 class Unit(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    name = StringProperty()
-    website_url = StringProperty()
+    name = StringProperty(required=True, index=True)
+    hq_state = StringProperty(choices=State.choices(), required=True)
+    hq_address = StringProperty()
+    hq_city = StringProperty()
+    hq_zip = StringProperty()
     phone = StringProperty()
     email = StringProperty()
+    website_url = StringProperty()
     description = StringProperty()
-    address = StringProperty()
-    city = StringProperty()
-    state = StringProperty(choices=State.choices())
-    zip = StringProperty()
-    agency_url = StringProperty()
-    officers_url = StringProperty()
     date_established = DateProperty()
 
     # Relationships
@@ -126,7 +124,7 @@ class Unit(AsyncStructuredNode):
 
 class Agency(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    name = StringProperty(required=True)
+    name = StringProperty(required=True, index=True)
     hq_state = StringProperty(choices=State.choices(), required=True)
     hq_address = StringProperty()
     hq_city = StringProperty()

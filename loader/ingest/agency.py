@@ -26,6 +26,7 @@ UPSERT_CYPHER = """
 UNWIND $rows AS row
 MATCH (s:Source {uid: row.source_uid})
 MERGE (a:Agency {name: row.name, hq_state: row.hq_state})
+ON CREATE SET a.uid = replace(randomUUID(), "-", "")
 SET a += row.props
 
 MERGE (a)-[cit:UPDATED_BY {
@@ -51,7 +52,6 @@ FOREACH (_ IN CASE WHEN c IS NULL THEN [] ELSE [1] END |
 )
 
 RETURN count(*) AS applied
-
 """
 
 AGENCY_FIELDS = (
@@ -141,8 +141,8 @@ async def upsert_agency_batch(batch: list[dict[str, Any]]) -> None:
 
         exists, existing_map, last_ts = prefetch.get(row_id, (False, None, None))
 
-        # Freshness gate: skip if we already have a citation from this source+url
-        # at or after this scraped time.
+        # Freshness gate: skip if we already have a citation from
+        # this source+url at or after this scraped time.
         if last_ts is not None and r["scraped_dt"] <= last_ts:
             continue
 
@@ -178,5 +178,5 @@ async def upsert_agency_batch(batch: list[dict[str, Any]]) -> None:
     if not to_apply:
         return
 
-    # --- 3) Apply in one write query (your cli wraps this in adb.write_transaction)
+    # --- 3) Apply in one write query (cli wraps this in adb.write_transaction)
     await adb.cypher_query(UPSERT_CYPHER, {"rows": to_apply})
