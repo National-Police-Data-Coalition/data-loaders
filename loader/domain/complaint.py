@@ -69,13 +69,13 @@ class Complaint(AsyncStructuredNode):
     outcome_of_contact = StringProperty()
 
     # Relationships
-    source_org = AsyncRelationshipTo("loader.models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
+    source_org = AsyncRelationshipTo("loader.domain.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
     location = AsyncRelationshipTo("Location", "OCCURRED_AT")
-    civilian_witnesses = AsyncRelationshipTo("loader.models.civilian.Civilian", "WITNESSED")
-    police_witnesses = AsyncRelationshipTo("loader.models.officer.Officer", "WITNESSED")
-    attachments = AsyncRelationshipTo("loader.models.attachment.Attachment", "ATTACHED_TO")
+    civilian_witnesses = AsyncRelationshipTo("loader.domain.civilian.Civilian", "WITNESSED")
+    police_witnesses = AsyncRelationshipTo("loader.domain.officer.Officer", "WITNESSED")
+    attachments = AsyncRelationshipTo("loader.domain.attachment.Attachment", "ATTACHED_TO")
     citations = AsyncRelationshipTo(
-        'loader.models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
     # civilian_review_board = AsyncRelationshipFrom("CivilianReviewBoard", "REVIEWED")
 
     def __repr__(self):
@@ -95,8 +95,8 @@ class Allegation(AsyncStructuredNode):
     outcome = StringProperty()
 
     # Relationships
-    complainant = AsyncRelationshipTo("loader.models.civilian.Civilian", "REPORTED_BY")
-    accused = AsyncRelationship("loader.models.officer.Officer", "ACCUSED_OF")
+    complainant = AsyncRelationshipTo("loader.domain.civilian.Civilian", "REPORTED_BY")
+    accused = AsyncRelationship("loader.domain.officer.Officer", "ACCUSED_OF")
     complaint = AsyncRelationship("Complaint", "ALLEGED")
 
     def __repr__(self):
@@ -110,7 +110,7 @@ class Investigation(AsyncStructuredNode):
     end_date = DateProperty()
 
     # Relationships
-    investigator = AsyncRelationship("loader.models.officer.Officer", "LED_BY")
+    investigator = AsyncRelationship("loader.domain.officer.Officer", "LED_BY")
     complaint = AsyncRelationship("Complaint", "EXAMINED_BY")
 
     def __repr__(self):
@@ -128,7 +128,7 @@ class Penalty(AsyncStructuredNode):
     agency_disposition = StringProperty()
 
     # Relationships
-    officer = AsyncRelationship("loader.models.officer.Officer", "RECEIVED")
+    officer = AsyncRelationship("loader.domain.officer.Officer", "RECEIVED")
     complaint = AsyncRelationship("Complaint", "RESULTS_IN")
 
     def __repr__(self):

@@ -55,16 +55,16 @@ class User(AsyncStructuredNode):
 
     # Data Source Relationships
     sources = AsyncRelationship(
-        'loader.models.source.Source',
+        'loader.domain.source.Source',
         "MEMBER_OF_SOURCE", model=SourceMember)
     received_invitations = AsyncRelationship(
-        'loader.models.source.Invitation',
+        'loader.domain.source.Invitation',
         "RECIEVED")
     extended_invitations = AsyncRelationship(
-        'loader.models.source.Invitation',
+        'loader.domain.source.Invitation',
         "EXTENDED")
     entended_staged_invitations = AsyncRelationship(
-        'loader.models.source.StagedInvitation',
+        'loader.domain.source.StagedInvitation',
         "EXTENDED")
 
     @property

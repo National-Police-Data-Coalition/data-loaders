@@ -38,12 +38,11 @@ class Officer(AsyncStructuredNode):
     suffix = StringProperty()
     ethnicity = StringProperty(choices=Ethnicity.choices())
     gender = StringProperty(choices=Gender.choices())
-    date_of_birth = DateProperty()
     year_of_birth = StringProperty()
 
     # Relationships
     citations = AsyncRelationshipTo(
-        'loader.models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
 
     def __repr__(self):
         return f"<Officer {self.id}>"

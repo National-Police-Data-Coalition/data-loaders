@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 from neomodel import adb
 from .base import register
@@ -176,7 +177,9 @@ async def upsert_agency_batch(batch: list[dict[str, Any]]) -> None:
         })
 
     if not to_apply:
+        logging.info("No agency records to upsert.")  
         return
 
     # --- 3) Apply in one write query (cli wraps this in adb.write_transaction)
+    logging.info(f"Upserting {len(to_apply)} agency records...")
     await adb.cypher_query(UPSERT_CYPHER, {"rows": to_apply})

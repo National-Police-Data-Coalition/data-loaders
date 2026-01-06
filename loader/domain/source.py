@@ -37,9 +37,9 @@ class Invitation(AsyncStructuredNode):
 
     source_org = AsyncRelationshipFrom("Source", "INVITED_TO")
     user = AsyncRelationshipFrom(
-        "loader.models.user.User", "EXTENDED_TO")
+        "loader.domain.user.User", "EXTENDED_TO")
     extender = AsyncRelationshipFrom(
-        "loader.models.user.User", "EXTENDED_BY")
+        "loader.domain.user.User", "EXTENDED_BY")
 
     def serialize(self):
         return {
@@ -58,7 +58,7 @@ class StagedInvitation(AsyncStructuredNode):
 
     source_org = AsyncRelationshipFrom("Source", "INVITATION_TO")
     extender = AsyncRelationshipFrom(
-        "loader.models.user.User", "EXTENDED_BY")
+        "loader.domain.user.User", "EXTENDED_BY")
 
     def serialize(self):
         return {
@@ -144,7 +144,7 @@ class Source(AsyncStructuredNode):
 
     # Relationships
     members = AsyncRelationshipFrom(
-        "loader.models.user.User",
+        "loader.domain.user.User",
         "IS_MEMBER", model=SourceMember)
     invitations = AsyncRelationshipTo(
         "Invitation", "HAS_PENDING_INVITATION")

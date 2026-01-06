@@ -50,15 +50,15 @@ class Unit(AsyncStructuredNode):
     # Relationships
     agency = AsyncRelationship("Agency", "ESTABLISHED_BY", cardinality=One)
     commanders = AsyncRelationship(
-        "loader.models.officer.Officer",
+        "loader.domain.officer.Officer",
         "COMMANDED_BY", model=UnitMembership)
     officers = AsyncRelationship(
-        "loader.models.officer.Officer",
+        "loader.domain.officer.Officer",
         "MEMBER_OF_UNIT", model=UnitMembership)
     citations = AsyncRelationshipTo(
-        'loader.models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
     city_node = AsyncRelationshipTo(
-        "loader.models.infra.locations.CityNode", "WITHIN_CITY")
+        "loader.domain.infra.locations.CityNode", "WITHIN_CITY")
 
     def __repr__(self):
         return f"<Unit {self.name}>"
@@ -137,9 +137,9 @@ class Agency(AsyncStructuredNode):
 
     # Relationships
     citations = AsyncRelationshipTo(
-        'loader.models.source.Source', "UPDATED_BY", model=Citation)
+        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
     city_node = AsyncRelationshipTo(
-        "loader.models.infra.locations.CityNode", "LOCATED_IN")
+        "loader.domain.infra.locations.CityNode", "LOCATED_IN")
 
     def __repr__(self):
         return f"<Agency {self.name}>"

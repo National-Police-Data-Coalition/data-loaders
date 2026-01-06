@@ -205,7 +205,9 @@ async def upsert_unit_batch(batch: list[dict[str, Any]]) -> None:
         })
 
     if not to_apply:
+        logging.info("No unit records to upsert.")
         return
 
     # --- 3) Apply in one write query (cli wraps this in adb.write_transaction)
+    logging.info(f"Upserting {len(to_apply)} unit records...")
     await adb.cypher_query(UPSERT_CYPHER, {"rows": to_apply})
