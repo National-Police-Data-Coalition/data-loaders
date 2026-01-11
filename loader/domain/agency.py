@@ -7,7 +7,6 @@ from loader.domain.officer import Officer
 
 from neomodel import (
     AsyncStructuredNode,
-    AsyncStructuredRel,
     StringProperty,
     AsyncRelationship,
     AsyncRelationshipTo,
@@ -27,13 +26,6 @@ class Jurisdiction(str, PropertyEnum):
     OTHER = "OTHER"
 
 
-class UnitMembership(AsyncStructuredRel):
-    earliest_date = DateProperty()
-    latest_date = DateProperty()
-    badge_number = StringProperty()
-    highest_rank = StringProperty()
-
-
 class Unit(AsyncStructuredNode):
     uid = UniqueIdProperty()
     name = StringProperty(required=True, index=True)
@@ -49,12 +41,6 @@ class Unit(AsyncStructuredNode):
 
     # Relationships
     agency = AsyncRelationship("Agency", "ESTABLISHED_BY", cardinality=One)
-    commanders = AsyncRelationship(
-        "loader.domain.officer.Officer",
-        "COMMANDED_BY", model=UnitMembership)
-    officers = AsyncRelationship(
-        "loader.domain.officer.Officer",
-        "MEMBER_OF_UNIT", model=UnitMembership)
     citations = AsyncRelationshipTo(
         'loader.domain.source.Source', "UPDATED_BY", model=Citation)
     city_node = AsyncRelationshipTo(
@@ -80,47 +66,6 @@ class Unit(AsyncStructuredNode):
             source_node = result[0][0]
             return source_node
         return None
-
-    async def get_current_commander(self):
-        """
-        Get the current commander of the unit.
-        Returns:
-            Officer: The current commander of the unit.
-        """
-        cy = """
-        MATCH (u:Unit {uid: $uid})-[r:COMMANDED_BY]-(o:Officer)
-        WITH u, r, o,
-            CASE WHEN r.latest_date IS NULL THEN 1 ELSE 0 END AS isCurrent
-        ORDER BY isCurrent DESC, r.earliest_date DESC
-        RETURN o AS officer
-        LIMIT 1;
-        """
-        result, meta = await adb.cypher_query(
-            cy, {'uid': self.uid}, resolve_objects=True)
-        if result:
-            officer_node = result[0][0]
-            return officer_node
-        return None
-
-    def update_commander(self, officer: Officer, date: date):
-        """
-        Update the commander of a unit. Ends the term of the
-        current commander (if needed) and creates a new relationship
-        with the new commander.
-
-        :param unit: The unit to update the commander for
-        :param officer: The officer to set as the commander
-        :param date: The date the officer became the commander
-        """
-        cur_com = self.get_current_commander()
-        if cur_com:
-            cur_com_rel = self.commanders.relationship(cur_com)
-            cur_com_rel.latest_date = date
-            cur_com_rel.save()
-        self.commanders.connect(officer, {
-            "earliest_date": date
-        })
-
 
 class Agency(AsyncStructuredNode):
     uid = UniqueIdProperty()

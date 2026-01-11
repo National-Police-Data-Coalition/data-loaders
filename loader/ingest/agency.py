@@ -14,7 +14,7 @@ UNWIND $rows AS row
 OPTIONAL MATCH (a:Agency {name: row.name, hq_state: row.hq_state})
 MATCH (s:Source {uid: row.source_uid})
 OPTIONAL MATCH (a)-[c:UPDATED_BY]->(s)
-WHERE c.user_uid IS NULL            // ignore user-created updates
+// WHERE c.user_uid IS NULL            // ignore user-created updates
 WITH row, a, max(c.timestamp) AS last_ts
 RETURN
   row.row_id AS row_id,
@@ -27,7 +27,10 @@ UPSERT_CYPHER = """
 UNWIND $rows AS row
 MATCH (s:Source {uid: row.source_uid})
 MERGE (a:Agency {name: row.name, hq_state: row.hq_state})
-ON CREATE SET a.uid = replace(randomUUID(), "-", "")
+  <-[:ESTABLISHED_BY]-(u:Unit {name: "Unknown", hq_state: row.hq_state})
+ON CREATE SET
+  a.uid = replace(randomUUID(), "-", ""),
+  u.uid = replace(randomUUID(), "-", "")
 SET a += row.props
 
 MERGE (a)-[cit:UPDATED_BY {
