@@ -53,6 +53,7 @@ python -m loader.cli load <input_file> [-l <logging_level>]
 - `<input_file>`: Path to the JSONL file to process.
 - `-l <logging_level>` (optional): Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
 - `--batch-size <size>` (optional): Number of records to process in each batch (default is 500).
+- `--concurrency <num>` (optional): Number of concurrent tasks to run (default is 4).
 - `--stop-on-error` (optional): Stop processing on the first error encountered.
 
 ### Example
