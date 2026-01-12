@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
-from neomodel import adb
+from neo4j import AsyncManagedTransaction
 from .base import register
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
@@ -24,16 +24,14 @@ OPTIONAL MATCH (o:Officer)-[:HAS_STATE_ID]-(sid)
 MATCH (s:Source {uid: row.source_uid})
 
 // Officer freshness
-CALL {
-  WITH o, s
+CALL (o, s) {
   OPTIONAL MATCH (o)-[c:UPDATED_BY]->(s)
   // WHERE c.user_uid IS NULL
   RETURN max(c.timestamp) AS last_ts
 }
 
 // Resolve incoming employments
-CALL {
-  WITH row, o, s
+CALL (row, o, s) {
   WITH row, o, s, coalesce(row.employments, []) AS emps
   UNWIND range(0, size(emps)-1) AS i
   WITH emps[i] AS emp, i, o, s
@@ -78,80 +76,6 @@ RETURN {
 } AS record
 """
 
-PREFETCH_WITH_EMPLOYMENT = """
-UNWIND $rows AS row
-
-// Resolve the State ID first
-OPTIONAL MATCH (sid:StateID {
-  state: row.sid_state,
-  id_name: row.sid_id_name,
-  id_value: row.sid_id_value
-})
-
-// Match Officer via StateID
-OPTIONAL MATCH (o:Officer)-[:HAS_STATE_ID]-(sid)
-
-MATCH (s:Source {uid: row.source_uid})
-
-// Officer freshness
-CALL {
-  WITH o, s
-  OPTIONAL MATCH (o)-[c:UPDATED_BY]->(s)
-  // WHERE c.user_uid IS NULL
-  RETURN max(c.timestamp) AS last_ts
-}
-
-// Resolve incoming employments
-CALL {
-  WITH row, o, s
-  WITH row, o, s, coalesce(row.employments, []) AS emps
-  UNWIND range(0, size(emps)-1) AS i
-  WITH emps[i] AS emp, i, o, s
-
-  // Resolve Unit via Agency+Unit name
-  OPTIONAL MATCH (a:Agency {name: emp.a_label, hq_state: emp.a_hq_state})
-    -[:ESTABLISHED_BY]-
-    (u:Unit {name: emp.unit_label, hq_state: emp.unit_hq_state})
-
-  // Match an existing Employment node if any
-  OPTIONAL MATCH (e:Employment)-[:HELD_BY]-(u)
-  WHERE u IS NOT NULL
-    AND (e)-[:IN_UNIT]-(u)
-    AND e.highest_rank = emp.highest_rank
-
-  OPTIONAL MATCH (e)-[ec:UPDATED_BY]->(s)
-
-  WITH i, emp, a, u, e, max(ec.timestamp) AS emp_last_ts
-
-  RETURN collect({
-    i: i,
-    a_name: emp.a_name,
-    a_hq_state: emp.a_hq_state,
-    unit_name: emp.unit_name,
-    unit_hq_state: emp.unit_hq_state,
-    highest_rank: emp.highest_rank,
-
-    // resolved + matched
-    agency_uid: a.uid,
-    unit_uid: u.uid,
-    employment_uid: e.uid,
-    matched: (e IS NOT NULL),
-
-    props: CASE WHEN e IS NULL THEN NULL ELSE properties(e) END,
-    last_ts: emp_last_ts
-  }) AS incoming_employments
-}
-
-RETURN {
-  row_id: row.row_id,
-  sid: CASE WHEN sid IS NULL THEN NULL ELSE sid.uid END,
-  exists: o IS NOT NULL,
-  existing: CASE WHEN o IS NULL THEN NULL ELSE properties(o) END,
-  last_ts: last_ts,
-  incoming_employments: incoming_employments
-} AS record
-"""
-
 UPSERT_CYPHER = """
 UNWIND $rows AS row
 MATCH (s:Source {uid: row.source_uid})
@@ -176,8 +100,7 @@ SET
 WITH o, row
 
 // Employment nodes
-CALL {
-    WITH o, row
+CALL (o, row){
     UNWIND coalesce(row.employments, []) AS emp
 
     MATCH (u:Unit {uid: emp.unit_uid})
@@ -185,6 +108,14 @@ CALL {
     MERGE (o)-[:HELD_BY]-(e:Employment {highest_rank: emp.highest_rank})-[:IN_UNIT]-(u)
     ON CREATE SET e.uid = replace(randomUUID(), "-", "")
     SET e += emp.props
+
+    MERGE (e)-[cit:UPDATED_BY {
+      timestamp: datetime(row.scraped_dt),
+      url: coalesce(row.url, \"\")
+    }]->(s)
+    SET
+      cit.user_uid = NULL,
+      cit.diff = emp.diff
 
     RETURN count(*) AS employments_updated
 }
@@ -236,20 +167,24 @@ def build_props_map(data: dict[str, Any], fields) -> dict[str, Any]:
 
 
 @register("officer")
-async def upsert_officer_batch(batch: list[dict[str, Any]]) -> None:
+async def upsert_officer_batch(
+    tx: AsyncManagedTransaction,
+    batch: list[dict[str, Any]],
+    log: logging.LoggerAdapter,
+    ) -> None:
     # Build input rows (one per JSONL object)
-    logging.info("Building officer upsert batch...")
+    log.info("Building officer upsert batch...")
     input_rows: list[dict[str, Any]] = []
     incoming_by_id: dict[int, dict[str, Any]] = {}
     incoming_emps_by_id = {}
 
     output = 5
-    skipped = 0
+    dropped_e_expired = dropped_e_bad = dropped_e_unit = 0
 
     for i, item in enumerate(batch):
-        d = item.get("data") or {}
+        fields = item.get("data") or {}
         employments = item.get("employment", [])
-        sids = d.get("state_ids", [])
+        sids = fields.get("state_ids", [])
 
         # Officer Identifiers
         primary_sid = sids[0] if sids else {}
@@ -258,8 +193,8 @@ async def upsert_officer_batch(batch: list[dict[str, Any]]) -> None:
         id_value = primary_sid.get("value")
         if not (id_state and id_name and id_value):
             continue
-        f_name = d.get("first_name")
-        l_name = d.get("last_name")
+        f_name = fields.get("first_name")
+        l_name = fields.get("last_name")
         if not (f_name and l_name):
             continue
 
@@ -296,22 +231,17 @@ async def upsert_officer_batch(batch: list[dict[str, Any]]) -> None:
             "scraped_dt": scraped_dt,
         }
         input_rows.append(row)
-        incoming_by_id[i] = d
+        incoming_by_id[i] = fields
         incoming_emps_by_id[i] = valid_employments
 
     if not input_rows:
         return
 
-    # --- 1) Prefetch existing + last citation date for (agency, source, url)
-
-    results, _meta = await adb.cypher_query(
-        PREFETCH_CYPHER, {"rows": input_rows})
-    logging.info(f"Prefetch returned {len(results)} records.")
-
-    # results rows come back as lists/tuples in neomodel; map by row_id
-    # row shape: [row_id, agency_uid, exists, existing_map, last_ts]
+    # --- 1) Prefetch existing + last citation date for (officers and employments)
+    results = await tx.run(PREFETCH_CYPHER, rows=input_rows)
     prefetch = {}
-    for (record,) in results:
+    async for rec in results:
+        record = rec["record"]
         row_id = int(record["row_id"])
         prefetch[row_id] = (
             record["sid"],
@@ -320,10 +250,7 @@ async def upsert_officer_batch(batch: list[dict[str, Any]]) -> None:
             record["last_ts"],
             record["incoming_employments"]
         )
-        # if  output > 0:
-        #     # logging.info(f"Incoming dat for row {row_id}: {incoming_emps_by_id[row_id]}")
-        #     logging.info(f"Prefetched for row {row_id}: {prefetch[row_id]}")
-        #     output -= 1
+    await results.consume()
 
     # --- 2) Decide what to apply, and compute diffs only for fresh rows
     to_apply: list[dict[str, Any]] = []
@@ -344,23 +271,49 @@ async def upsert_officer_batch(batch: list[dict[str, Any]]) -> None:
         props = build_props_map(incoming_data, OFFICER_FIELDS)
         emps = []
 
-        if len(incoming_emps) != len(employments):
-            logging.warning("Employment count mismatch during officer upsert diffing.")
-            logging.warning(f"Incoming employments: {incoming_emps}")
-            logging.warning(f"Prefetched employments: {employments}")
+        # if len(incoming_emps) != len(employments):
+        #     logging.warning("Employment count mismatch during officer upsert diffing.")
+        #     logging.warning(f"Incoming employments: {incoming_emps}")
+        #     logging.warning(f"Prefetched employments: {employments}")
         for i, fetched in enumerate(employments):
+            ts = fetched.get("last_ts")
+            # Freshness gate for employment
+            if ts is not None and r["scraped_dt"] <= ts:
+                dropped_e_expired += 1
+                continue
             # Skip if we couldn't resolve unit
             unit_uid = fetched.get("unit_uid")
             if not unit_uid:
+                dropped_e_unit += 1
                 continue
             inc_index = fetched["i"]
             emp = incoming_emps[inc_index]
 
             emp_props = build_props_map(emp, EMPLOYMENT_FIELDS)
-            emps.append({
+            rank = emp.get("highest_rank")
+            if not (rank and emp_props):
+                dropped_e_bad += 1
+                continue
+            emp_base = {
                 "unit_uid": unit_uid,
-                "highest_rank": emp.get("highest_rank"),
+                "highest_rank": rank,
                 "props": emp_props,
+            }
+            if not emp.get("matched"):
+                # New employment record
+                emps.append({
+                    **emp_base,
+                    "diff": None,
+                })
+            
+            diff = detect_diff_dict(fetched.get("props") or {}, emp)
+            if not diff:
+                dropped_e_expired += 1
+                continue
+
+            emps.append({
+                **emp_base,
+                "diff": diff.to_json(),
             })
 
         base_apply = {
@@ -385,16 +338,23 @@ async def upsert_officer_batch(batch: list[dict[str, Any]]) -> None:
 
         to_apply.append({
             **base_apply,
-            "diff": json.loads(diff.to_json()),
+            "diff": diff.to_json(),
         })
 
     if not to_apply:
-        logging.info("No unit records to upsert.")
+        log.info("No officer records to upsert.")
         return
     
-    logging.info("Example upsert row:")
-    logging.info(to_apply[0])
 
     # --- 3) Apply in one write query (cli wraps this in adb.write_transaction)
-    logging.info(f"Upserting {len(to_apply)} unit records...")
-    await adb.cypher_query(UPSERT_CYPHER, {"rows": to_apply})
+    log.info(f"Upserting {len(to_apply)} officer records...")
+    if dropped_e_expired or dropped_e_bad or dropped_e_unit:
+        log.info(
+            "Dropped employment records -" \
+            " expired: {expired}, bad: {bad}, missing unit: {mmissing}".format({
+                "expired": dropped_e_expired,
+                "bad": dropped_e_bad,
+                "mmissing": dropped_e_unit,
+            }))
+    merge_results = await tx.run(UPSERT_CYPHER, rows=to_apply)
+    await merge_results.consume()

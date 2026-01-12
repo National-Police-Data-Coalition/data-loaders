@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from typing import Any
-from neomodel import adb
+from neo4j import AsyncManagedTransaction
 from .base import register
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
@@ -88,7 +88,12 @@ def build_props_map(unit_data: dict[str, Any]) -> dict[str, Any]:
 
 
 @register("unit")
-async def upsert_unit_batch(batch: list[dict[str, Any]]) -> None:
+async def upsert_unit_batch(
+    tx: AsyncManagedTransaction,
+    batch: list[dict[str, Any]],
+    log: logging.LoggerAdapter
+    ) -> None:
+
     # Build input rows (one per JSONL object)
     input_rows: list[dict[str, Any]] = []
     incoming_by_id: dict[int, dict[str, Any]] = {}
@@ -139,14 +144,11 @@ async def upsert_unit_batch(batch: list[dict[str, Any]]) -> None:
     if not input_rows:
         return
 
-    # --- 1) Prefetch existing + last citation date for (agency, source, url)
-    results, _meta = await adb.cypher_query(
-        PREFETCH_CYPHER, {"rows": input_rows})
-
-    # results rows come back as lists/tuples in neomodel; map by row_id
-    # row shape: [row_id, agency_uid, exists, existing_map, last_ts]
+    # --- 1) Prefetch existing + last citation date for (unit, source, url)
+    results = await tx.run(PREFETCH_CYPHER, rows=input_rows)
     prefetch = {}
-    for (record,) in results:
+    async for rec in results:
+        record = rec["record"]
         row_id = int(record["row_id"])
         prefetch[row_id] = (
             record["agency_uid"],
@@ -154,6 +156,7 @@ async def upsert_unit_batch(batch: list[dict[str, Any]]) -> None:
             record["existing"],
             record["last_ts"]
         )
+    await results.consume()
 
     # --- 2) Decide what to apply, and compute diffs only for fresh rows
     to_apply: list[dict[str, Any]] = []
@@ -205,9 +208,10 @@ async def upsert_unit_batch(batch: list[dict[str, Any]]) -> None:
         })
 
     if not to_apply:
-        logging.info("No unit records to upsert.")
+        log.info("No unit records to upsert.")
         return
 
     # --- 3) Apply in one write query (cli wraps this in adb.write_transaction)
-    logging.info(f"Upserting {len(to_apply)} unit records...")
-    await adb.cypher_query(UPSERT_CYPHER, {"rows": to_apply})
+    log.info(f"Upserting {len(to_apply)} unit records...")
+    merge_results = await tx.run(UPSERT_CYPHER, rows=to_apply)
+    await merge_results.consume()
