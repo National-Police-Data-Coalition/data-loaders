@@ -36,7 +36,7 @@ UPSERT_CYPHER = """
 UNWIND $rows AS row
 MATCH (s:Source {uid: row.source_uid})
 MATCH (a:Agency {uid: row.agency_uid})
-MERGE (a)-[:ESTABLISHED_BY]->(u:Unit {name: row.name})
+MERGE (a)<-[:ESTABLISHED_BY]-(u:Unit {name: row.name})
 ON CREATE SET u.uid = replace(randomUUID(), "-", "")
 SET u += row.props
 

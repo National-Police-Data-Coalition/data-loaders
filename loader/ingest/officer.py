@@ -85,7 +85,7 @@ MERGE (sid:StateID {
   id_name: row.sid_id_name,
   id_value: row.sid_id_value
 })
-MERGE (sid)-[:HAS_STATE_ID]-(o:Officer)
+MERGE (sid)<-[:HAS_STATE_ID]-(o:Officer)
 ON CREATE SET o.uid = replace(randomUUID(), "-", "")
 SET o += row.props
 
@@ -97,15 +97,15 @@ SET
   cit.user_uid = NULL,
   cit.diff = row.diff
 
-WITH o, row
+WITH s, o, row
 
 // Employment nodes
-CALL (o, row){
+CALL (s, o, row){
     UNWIND coalesce(row.employments, []) AS emp
 
     MATCH (u:Unit {uid: emp.unit_uid})
 
-    MERGE (o)-[:HELD_BY]-(e:Employment {highest_rank: emp.highest_rank})-[:IN_UNIT]-(u)
+    MERGE (o)<-[:HELD_BY]-(e:Employment {highest_rank: emp.highest_rank})-[:IN_UNIT]->(u)
     ON CREATE SET e.uid = replace(randomUUID(), "-", "")
     SET e += emp.props
 

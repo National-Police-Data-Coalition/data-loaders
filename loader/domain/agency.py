@@ -78,6 +78,7 @@ class Agency(AsyncStructuredNode):
     email = StringProperty()
     website_url = StringProperty()
     description = StringProperty()
+    date_established = DateProperty()
     jurisdiction = StringProperty(choices=Jurisdiction.choices())
 
     # Relationships

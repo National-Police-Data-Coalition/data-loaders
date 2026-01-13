@@ -114,7 +114,7 @@ class Citation(AsyncStructuredRel):
 
     def __repr__(self):
         """Represent instance as a unique string."""
-        return f"<Citation {self.uid}>"
+        return f"<Citation {self.timestamp}>"
 
     # @property
     # def diffs(self):
