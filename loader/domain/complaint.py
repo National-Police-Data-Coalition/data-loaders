@@ -8,7 +8,8 @@ from neomodel import (
     AsyncRelationshipTo,
     AsyncRelationship,
     DateProperty,
-    UniqueIdProperty
+    UniqueIdProperty,
+    One
 )
 
 
@@ -70,7 +71,7 @@ class Complaint(AsyncStructuredNode):
 
     # Relationships
     source_org = AsyncRelationshipTo("loader.domain.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
-    location = AsyncRelationshipTo("Location", "OCCURRED_AT")
+    location = AsyncRelationshipTo("Location", "OCCURRED_IN", cardinality=One)
     civilian_witnesses = AsyncRelationshipTo("loader.domain.civilian.Civilian", "WITNESSED")
     police_witnesses = AsyncRelationshipTo("loader.domain.officer.Officer", "WITNESSED")
     attachments = AsyncRelationshipTo("loader.domain.attachment.Attachment", "ATTACHED_TO")
