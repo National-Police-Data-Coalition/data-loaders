@@ -1,4 +1,4 @@
-from loader.domain.types.enums import State, Ethnicity, Gender
+from loader.domain.types.enums import PropertyEnum, State, Ethnicity, Gender
 from loader.domain.source import Citation
 
 from neomodel import (
@@ -7,6 +7,12 @@ from neomodel import (
     StringProperty, DateProperty,
     UniqueIdProperty, One
 )
+
+
+# Enums - Not yet used for validation, but could be in the future
+class StateIDType(PropertyEnum):
+    TAX_ID_NUMBER = "TAX_ID_NUMBER"
+    NPI_ID = "NPI_ID"
 
 
 class StateID(AsyncStructuredNode):
@@ -21,7 +27,7 @@ class StateID(AsyncStructuredNode):
     officer = AsyncRelationship('Officer', "HAS_STATE_ID", cardinality=One)
 
     def __repr__(self):
-        return f"<StateID: Officer {self.officer_id}, {self.state}>"
+        return f"<StateID: {self.id_name}, {self.state}>"
 
 
 class Officer(AsyncStructuredNode):

@@ -170,7 +170,7 @@ async def upsert_agency_batch(
             continue
 
         # Existing: only write if there are meaningful diffs
-        diff = detect_diff_dict(existing_map or {}, incoming_data)
+        diff = detect_diff_dict(existing_map or {}, props)
         if not diff:
             continue
 

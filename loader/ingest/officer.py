@@ -15,7 +15,7 @@ UNWIND $rows AS row
 OPTIONAL MATCH (sid:StateID {
   state: row.sid_state,
   id_name: row.sid_id_name,
-  id_value: row.sid_id_value
+  value: row.sid_id_value
 })
 
 // Match Officer via StateID
@@ -37,8 +37,8 @@ CALL (row, o, s) {
   WITH emps[i] AS emp, i, o, s
 
   // Resolve Unit via Agency+Unit name
-  MATCH (a:Agency {name: emp.agency_uid, hq_state: emp.a_hq_state})
-  OPTIONAL MATCH (a)<-[:ESTABLISHED_BY]-(u:Unit {name: emp.unit_uid, hq_state: emp.u_hq_state})
+  MATCH (a:Agency {name: emp.agency_label, hq_state: emp.a_hq_state})
+  OPTIONAL MATCH (a)<-[:ESTABLISHED_BY]-(u:Unit {name: emp.unit_label, hq_state: emp.u_hq_state})
 
   // Match an existing Employment node if any
   OPTIONAL MATCH (e:Employment)-[:HELD_BY]-(u)
@@ -83,7 +83,7 @@ MATCH (s:Source {uid: row.source_uid})
 MERGE (sid:StateID {
   state: row.sid_state,
   id_name: row.sid_id_name,
-  id_value: row.sid_id_value
+  value: row.sid_id_value
 })
 MERGE (sid)<-[:HAS_STATE_ID]-(o:Officer)
 ON CREATE SET o.uid = replace(randomUUID(), "-", "")
@@ -178,7 +178,7 @@ async def upsert_officer_batch(
     incoming_by_id: dict[int, dict[str, Any]] = {}
     incoming_emps_by_id = {}
 
-    output = 5
+    output = 0
     dropped_e_expired = dropped_e_bad = dropped_e_unit = 0
 
     for i, item in enumerate(batch):
@@ -209,17 +209,20 @@ async def upsert_officer_batch(
         # Employment records
         valid_employments = []
         for emp in employments:
-            a_label = emp.get("agency_uid")
+            a_label = emp.get("agency_label")
             a_hq_state = emp.get("a_hq_state")
-            unit_label = emp.get("unit_uid")
-            unit_hq_state = emp.get("u_hq_state")
-            if not (a_label and a_hq_state and unit_label and unit_hq_state):
+            u_label = emp.get("unit_label")
+            u_hq_state = emp.get("u_hq_state")
+            if not (a_label and a_hq_state and u_label and u_hq_state):
                 continue
             valid_employments.append(emp)
 
-        # if i < output:
-        #     logging.info(f"Valid employment for officer {f_name} {l_name}:")
-        #     logging.info(json.dumps(valid_employments))
+        if i < output:
+            if len(valid_employments) > 0:
+                log.info(f"Valid employments for officer {f_name} {l_name}:")
+                log.info(json.dumps(valid_employments))
+            else:
+                log.info(f"No valid employments for officer {f_name} {l_name}.")
         row = {
             "row_id": i,
             "sid_state": id_state,
@@ -238,6 +241,8 @@ async def upsert_officer_batch(
         return
 
     # --- 1) Prefetch existing + last citation date for (officers and employments)
+    log.info("Prefetching existing officer records...")
+    # log.info(input_rows)
     results = await tx.run(PREFETCH_CYPHER, rows=input_rows)
     prefetch = {}
     async for rec in results:
@@ -250,6 +255,9 @@ async def upsert_officer_batch(
             record["last_ts"],
             record["incoming_employments"]
         )
+        if row_id < output:
+            log.info(f"Prefetched officer record for row {row_id}:")
+            log.info(json.dumps(record))
     await results.consume()
 
     # --- 2) Decide what to apply, and compute diffs only for fresh rows
@@ -306,7 +314,7 @@ async def upsert_officer_batch(
                     "diff": None,
                 })
             
-            diff = detect_diff_dict(fetched.get("props") or {}, emp)
+            diff = detect_diff_dict(fetched.get("props") or {}, emp_props)
             if not diff:
                 dropped_e_expired += 1
                 continue
@@ -332,7 +340,7 @@ async def upsert_officer_batch(
             continue
 
         # Existing: only write if there are meaningful diffs
-        diff = detect_diff_dict(existing_map or {}, incoming_data)
+        diff = detect_diff_dict(existing_map or {}, props)
         if not diff:
             continue
 
@@ -351,10 +359,11 @@ async def upsert_officer_batch(
     if dropped_e_expired or dropped_e_bad or dropped_e_unit:
         log.info(
             "Dropped employment records -" \
-            " expired: {expired}, bad: {bad}, missing unit: {mmissing}".format({
-                "expired": dropped_e_expired,
-                "bad": dropped_e_bad,
-                "mmissing": dropped_e_unit,
-            }))
+            " expired: {expired}, bad: {bad}, missing unit: {mmissing}".format(
+                expired=dropped_e_expired,
+                bad=dropped_e_bad,
+                mmissing=
+                dropped_e_unit,
+            ))
     merge_results = await tx.run(UPSERT_CYPHER, rows=to_apply)
     await merge_results.consume()

@@ -276,6 +276,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Args:
             input_file="",
             logging=ns.logging,
             batch_size=0,
+            concurrency=0,
             stop_on_error=False,
         )
 
