@@ -7,6 +7,7 @@ from neomodel import (
     StringProperty,
     AsyncRelationshipTo,
     AsyncRelationship,
+    AsyncRelationshipFrom,
     DateProperty,
     UniqueIdProperty,
     One
@@ -62,6 +63,7 @@ class Location(AsyncStructuredNode):
 class Complaint(AsyncStructuredNode):
     uid = UniqueIdProperty()
     record_id = StringProperty()
+    complaint_key = StringProperty(unique_index=True)
     category = StringProperty()
     incident_date = DateProperty()
     recieved_date = DateProperty()
@@ -86,7 +88,8 @@ class Complaint(AsyncStructuredNode):
 
 class Allegation(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    record_id = StringProperty()
+    record_id = StringProperty(index=True)
+    allegation_key = StringProperty(unique_index=True)
     allegation = StringProperty()
     type = StringProperty()
     subtype = StringProperty()
@@ -97,8 +100,8 @@ class Allegation(AsyncStructuredNode):
 
     # Relationships
     complainant = AsyncRelationshipTo("loader.domain.civilian.Civilian", "REPORTED_BY")
-    accused = AsyncRelationship("loader.domain.officer.Officer", "ACCUSED_OF")
-    complaint = AsyncRelationship("Complaint", "ALLEGED")
+    accused = AsyncRelationshipFrom("loader.domain.officer.Officer", "ACCUSED_OF")
+    complaint = AsyncRelationshipFrom("Complaint", "ALLEGED")
 
     def __repr__(self):
         """Represent instance as a unique string."""
