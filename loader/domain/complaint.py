@@ -56,18 +56,22 @@ class Location(AsyncStructuredNode):
     city = StringProperty()
     state = StringProperty()
     zip = StringProperty()
-    responsibility = StringProperty()
-    responsibility_type = StringProperty()
+    administrative_area = StringProperty()
+    administrative_area_type = StringProperty()
+
+    city_node = AsyncRelationshipTo(
+        "loader.domain.infra.locations.CityNode", 
+        "LOCATED_IN", cardinality=One)
 
 
 class Complaint(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    record_id = StringProperty()
+    record_id = StringProperty(index=True)
     complaint_key = StringProperty(unique_index=True)
     category = StringProperty()
-    incident_date = DateProperty()
-    recieved_date = DateProperty()
-    closed_date = DateProperty()
+    incident_date = DateProperty(index=True)
+    received_date = DateProperty(index=True)
+    closed_date = DateProperty(index=True)
     reason_for_contact = StringProperty()
     outcome_of_contact = StringProperty()
 

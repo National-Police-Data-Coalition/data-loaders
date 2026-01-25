@@ -4,7 +4,7 @@ from loader.domain.source import Citation
 from neomodel import (
     AsyncStructuredNode,
     AsyncRelationshipTo, AsyncRelationshipFrom, AsyncRelationship,
-    StringProperty, DateProperty,
+    StringProperty, IntegerProperty,
     UniqueIdProperty, One
 )
 
@@ -44,7 +44,7 @@ class Officer(AsyncStructuredNode):
     suffix = StringProperty()
     ethnicity = StringProperty(choices=Ethnicity.choices())
     gender = StringProperty(choices=Gender.choices())
-    year_of_birth = StringProperty()
+    year_of_birth = IntegerProperty()
 
     # Relationships
     citations = AsyncRelationshipTo(
