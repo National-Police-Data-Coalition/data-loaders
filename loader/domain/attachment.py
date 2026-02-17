@@ -1,11 +1,11 @@
 from neomodel import (
     StringProperty,
     UniqueIdProperty,
-    StructuredNode
+    AsyncStructuredNode
 )
 
 
-class Attachment(StructuredNode):
+class Attachment(AsyncStructuredNode):
     uid = UniqueIdProperty()
     title = StringProperty()
     hash = StringProperty()

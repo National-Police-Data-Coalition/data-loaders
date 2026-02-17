@@ -1,14 +1,16 @@
 """Define the Classes for Complaints."""
-from loader.models.types.enums import PropertyEnum
-from loader.models.source import Citation
+from loader.domain.types.enums import PropertyEnum
+from loader.domain.source import Citation
 from neomodel import (
-    StructuredNode,
-    StructuredRel,
+    AsyncStructuredNode,
+    AsyncStructuredRel,
     StringProperty,
-    RelationshipTo,
-    Relationship,
+    AsyncRelationshipTo,
+    AsyncRelationship,
+    AsyncRelationshipFrom,
     DateProperty,
-    UniqueIdProperty
+    UniqueIdProperty,
+    One
 )
 
 
@@ -20,7 +22,7 @@ class RecordType(str, PropertyEnum):
 
 
 # Neo4j Models
-class ComplaintSourceRel(StructuredRel):
+class ComplaintSourceRel(AsyncStructuredRel):
     uid = UniqueIdProperty()
     record_type = StringProperty(
         choices=RecordType.choices(),
@@ -47,45 +49,51 @@ class ComplaintSourceRel(StructuredRel):
     reporting_agency_email = StringProperty()
 
 
-class Location(StructuredNode):
+class Location(AsyncStructuredNode):
     location_type = StringProperty()
     loocation_description = StringProperty()
     address = StringProperty()
     city = StringProperty()
     state = StringProperty()
     zip = StringProperty()
-    responsibility = StringProperty()
-    responsibility_type = StringProperty()
+    administrative_area = StringProperty()
+    administrative_area_type = StringProperty()
+
+    city_node = AsyncRelationshipTo(
+        "loader.domain.infra.locations.CityNode", 
+        "LOCATED_IN", cardinality=One)
 
 
-class Complaint(StructuredNode):
+class Complaint(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    record_id = StringProperty()
+    record_id = StringProperty(index=True)
+    complaint_key = StringProperty(unique_index=True)
     category = StringProperty()
-    incident_date = DateProperty()
-    recieved_date = DateProperty()
-    closed_date = DateProperty()
+    incident_date = DateProperty(index=True)
+    received_date = DateProperty(index=True)
+    closed_date = DateProperty(index=True)
     reason_for_contact = StringProperty()
     outcome_of_contact = StringProperty()
 
     # Relationships
-    source_org = RelationshipTo("loader.models.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
-    location = RelationshipTo("Location", "OCCURRED_AT")
-    civilian_witnesses = RelationshipTo("loader.models.civilian.Civilian", "WITNESSED")
-    police_witnesses = RelationshipTo("loader.models.officer.Officer", "WITNESSED")
-    attachments = RelationshipTo("loader.models.attachment.Attachment", "ATTACHED_TO")
-    citations = RelationshipTo(
-        'loader.models.source.Source', "UPDATED_BY", model=Citation)
-    # civilian_review_board = RelationshipFrom("CivilianReviewBoard", "REVIEWED")
+    source_org = AsyncRelationshipTo("loader.domain.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
+    location = AsyncRelationshipTo("Location", "OCCURRED_IN", cardinality=One)
+    civilian_witnesses = AsyncRelationshipTo("loader.domain.civilian.Civilian", "WITNESSED")
+    police_witnesses = AsyncRelationshipTo("loader.domain.officer.Officer", "WITNESSED")
+    attachments = AsyncRelationshipTo("loader.domain.attachment.Attachment", "ATTACHED_TO")
+    citations = AsyncRelationshipTo(
+        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
+    # civilian_review_board = AsyncRelationshipFrom("CivilianReviewBoard", "REVIEWED")
 
     def __repr__(self):
         """Represent instance as a unique string."""
         return f"<Complaint {self.uid}>"
 
 
-class Allegation(StructuredNode):
+class Allegation(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    record_id = StringProperty()
+    record_id = StringProperty(index=True)
+    allegation_key = StringProperty(unique_index=True)
     allegation = StringProperty()
     type = StringProperty()
     subtype = StringProperty()
@@ -95,30 +103,30 @@ class Allegation(StructuredNode):
     outcome = StringProperty()
 
     # Relationships
-    complainant = RelationshipTo("loader.models.civilian.Civilian", "REPORTED_BY")
-    accused = Relationship("loader.models.officer.Officer", "ACCUSED_OF")
-    complaint = Relationship("Complaint", "ALLEGED")
+    complainant = AsyncRelationshipTo("loader.domain.civilian.Civilian", "REPORTED_BY")
+    accused = AsyncRelationshipFrom("loader.domain.officer.Officer", "ACCUSED_OF")
+    complaint = AsyncRelationshipFrom("Complaint", "ALLEGED")
 
     def __repr__(self):
         """Represent instance as a unique string."""
         return f"<Allegation {self.uid}>"
 
 
-class Investigation(StructuredNode):
+class Investigation(AsyncStructuredNode):
     uid = UniqueIdProperty()
     start_date = DateProperty()
     end_date = DateProperty()
 
     # Relationships
-    investigator = Relationship("loader.models.officer.Officer", "LED_BY")
-    complaint = Relationship("Complaint", "EXAMINED_BY")
+    investigator = AsyncRelationship("loader.domain.officer.Officer", "LED_BY")
+    complaint = AsyncRelationship("Complaint", "EXAMINED_BY")
 
     def __repr__(self):
         """Represent instance as a unique string."""
         return f"<Investigation {self.uid}>"
 
 
-class Penalty(StructuredNode):
+class Penalty(AsyncStructuredNode):
     uid = UniqueIdProperty()
     penalty = StringProperty()
     date_assessed = DateProperty()
@@ -128,8 +136,8 @@ class Penalty(StructuredNode):
     agency_disposition = StringProperty()
 
     # Relationships
-    officer = Relationship("loader.models.officer.Officer", "RECEIVED")
-    complaint = Relationship("Complaint", "RESULTS_IN")
+    officer = AsyncRelationship("loader.domain.officer.Officer", "RECEIVED")
+    complaint = AsyncRelationship("Complaint", "RESULTS_IN")
 
     def __repr__(self):
         """Represent instance as a unique string."""

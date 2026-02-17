@@ -1,7 +1,7 @@
 
 from typing import Any, Optional, List, Dict, Tuple
 from neomodel import (
-    db, StructuredNode
+    adb, AsyncStructuredNode
 )
 
 # A tiny, read-only, chainable relation view.
@@ -16,7 +16,7 @@ class RelQuery:
         agency.units.one()  # raises if != 1
     """
     def __init__(
-            self, owner: StructuredNode, base_cypher: str,
+            self, owner: AsyncStructuredNode, base_cypher: str,
             return_alias: str, inflate_cls):
         self._owner = owner
         self._base = base_cypher.strip().rstrip(";")
@@ -62,46 +62,46 @@ class RelQuery:
                 parts.append(f"LIMIT {self._limit}")
         return " ".join(parts) + ";", self._params
 
-    def all(self):
+    async def all(self):
         cy, params = self._compose()
-        rows, _ = db.cypher_query(cy, params, resolve_objects=True)
+        rows, _ = await adb.cypher_query(cy, params, resolve_objects=True)
         # if resolve_objects=True is wired, rows come back as objects already
-        if rows and not isinstance(rows[0][0], StructuredNode):
+        if rows and not isinstance(rows[0][0], AsyncStructuredNode):
             # fallback inflate (in case resolve_objects isn't used)
             return [self._inflate.inflate(row[0]) for row in rows]
         return [row[0] for row in rows]
 
-    def first(self):
+    async def first(self):
         if self._limit is None:
             self.limit(1)
-        res = self.all()
+        res = await self.all()
         return res[0] if res else None
 
-    def one(self):
+    async def one(self):
         # exactly one or raise
-        res = self.limit(2).all()
+        res = await self.limit(2).all()
         if len(res) != 1:
             raise ValueError(f"Expected exactly one result, got {len(res)}")
         return res[0]
 
-    def one_or_none(self):
+    async def one_or_none(self):
         # exactly one or none
-        res = self.limit(2).all()
+        res = await self.limit(2).all()
         if len(res) > 1:
             raise ValueError(f"Expected at most one result, got {len(res)}")
         return res[0] if res else None
 
-    def exists(self) -> bool:
+    async def exists(self) -> bool:
         cy, params = self._compose(count_only=True)
-        rows, _ = db.cypher_query(cy, params)
+        rows, _ = await adb.cypher_query(cy, params)
         return bool(rows and rows[0][0] > 0)
 
-    def count(self) -> int:
+    async def count(self) -> int:
         """
         Count the number of nodes matching the query.
         Returns:
             int: The count of nodes.
         """
         cy, params = self._compose(count_only=True)
-        rows, _ = db.cypher_query(cy, params)
+        rows, _ = await adb.cypher_query(cy, params)
         return rows[0][0] if rows else 0

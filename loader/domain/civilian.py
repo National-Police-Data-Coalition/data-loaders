@@ -1,14 +1,13 @@
 """Define the Classes for Civilians."""
-from loader.models.types.enums import Ethnicity, Gender
+from loader.domain.types.enums import Ethnicity, Gender
 from neomodel import (
-    StructuredNode,
+    AsyncStructuredNode,
     StringProperty,
-    IntegerProperty,
-    RelationshipTo
+    IntegerProperty
 )
 
 
-class Civilian(StructuredNode):
+class Civilian(AsyncStructuredNode):
     age = IntegerProperty()
     age_group = StringProperty()
     ethnicity = StringProperty(choices=Ethnicity.choices())

@@ -1,11 +1,11 @@
 from neomodel import (
-    StructuredNode,
+    AsyncStructuredNode,
     StringProperty,
     IntegerProperty,
     UniqueIdProperty,
-    RelationshipTo,
-    RelationshipFrom,
-    ZeroOrOne,
+    AsyncRelationship,
+    AsyncRelationshipTo,
+    ZeroOrOne, One
 )
 from neomodel.contrib.spatial_properties import PointProperty
 
@@ -71,7 +71,7 @@ STATE_INFO = {
 
 
 
-class Place(StructuredNode):
+class Place(AsyncStructuredNode):
     """
     Base class for all places. Adds the 'Place' label to all subclasses.
     """
@@ -88,8 +88,7 @@ class StateNode(Place):
     abbreviation = StringProperty(required=True, unique_index=True)
 
     # Relationships
-    capital = RelationshipTo("CityNode", "HAS_CAPITAL", cardinality=ZeroOrOne)
-    counties = RelationshipTo("CountyNode", "HAS_COUNTY")
+    capitol = AsyncRelationship("CityNode", "IS_CAPITOL", cardinality=ZeroOrOne)
 
     def __repr__(self):
         return f"<State {self.name}>"
@@ -99,8 +98,7 @@ class CountyNode(Place):
     fips = StringProperty(required=True, unique_index=True)
 
     # Relationships
-    state = RelationshipTo("StateNode", "WITHIN_STATE")
-    cities = RelationshipTo("CityNode", "HAS_CITY")
+    state = AsyncRelationshipTo("StateNode", "WITHIN_STATE", cardinality=One)
 
     def __repr__(self):
         return f"<County {self.name}>"
@@ -111,7 +109,7 @@ class CityNode(Place):
     sm_id = StringProperty(unique_index=True)  # SimpleMaps ID
 
     # Relationships
-    county = RelationshipTo("CountyNode", "WITHIN_COUNTY")
+    county = AsyncRelationshipTo("CountyNode", "WITHIN_COUNTY", cardinality=One)
 
     def __repr__(self):
         return f"<City {self.name}>"
@@ -119,7 +117,7 @@ class CityNode(Place):
 
 class PrecinctNode(Place):
     # Relationships
-    city = RelationshipFrom("CityNode", "HAS_PRECINCT")
+    city = AsyncRelationshipTo("CityNode", "WITHIN_CITY", cardinality=One)
 
     def __repr__(self):
         return f"<Precinct {self.name}>"
