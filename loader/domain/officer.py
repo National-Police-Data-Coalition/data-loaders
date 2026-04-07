@@ -21,9 +21,10 @@ class StateID(AsyncStructuredNode):
     law enforcement agencies. For example, in New York, this would be
     the Tax ID Number.
     """
-    id_name = StringProperty()  # e.g. "Tax ID Number"
-    state = StringProperty(choices=State.choices())  # e.g. "NY"
-    value = StringProperty()  # e.g. "958938"
+    id_name = StringProperty(required=True)  # e.g. "Tax ID Number"
+    state = StringProperty(
+        choices=State.choices(), required=True)  # e.g. "NY"
+    value = StringProperty(required=True)  # e.g. "958938"
     officer = AsyncRelationship('Officer', "HAS_STATE_ID", cardinality=One)
 
     def __repr__(self):

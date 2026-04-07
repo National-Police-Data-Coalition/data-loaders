@@ -1,4 +1,5 @@
 from loader.domain.types.enums import PropertyEnum
+from loader.domain.properties.datetime import DateNeo4jFormatProperty
 from loader.domain.source import Citation
 
 from neomodel import (
@@ -34,8 +35,8 @@ class Employment(AsyncStructuredNode):
     uid = UniqueIdProperty()
     key = StringProperty()
     type = StringProperty()
-    earliest_date = DateProperty()
-    latest_date = DateProperty()
+    earliest_date = DateNeo4jFormatProperty()
+    latest_date = DateNeo4jFormatProperty()
     badge_number = StringProperty()
     highest_rank = StringProperty()
     status = StringProperty()
@@ -55,8 +56,8 @@ class CommandAssignment(AsyncStructuredNode):
     uid = UniqueIdProperty()
     type = StringProperty()
     title = StringProperty()
-    earliest_date = DateProperty()
-    latest_date = DateProperty()
+    earliest_date = DateNeo4jFormatProperty()
+    latest_date = DateNeo4jFormatProperty()
     badge_number = StringProperty()
     highest_rank = StringProperty()
     change = StringProperty()

@@ -1,6 +1,7 @@
 from datetime import date
 from loader.utils.query import RelQuery
 from loader.domain.types.enums import State, PropertyEnum
+from loader.domain.properties.datetime import DateNeo4jFormatProperty
 from loader.domain.infra.locations import StateNode, CountyNode, CityNode
 from loader.domain.source import Citation
 from loader.domain.officer import Officer
@@ -37,7 +38,7 @@ class Unit(AsyncStructuredNode):
     email = StringProperty()
     website_url = StringProperty()
     description = StringProperty()
-    date_established = DateProperty()
+    date_established = DateNeo4jFormatProperty()
 
     # Relationships
     agency = AsyncRelationship("Agency", "ESTABLISHED_BY", cardinality=One)
@@ -78,7 +79,7 @@ class Agency(AsyncStructuredNode):
     email = StringProperty()
     website_url = StringProperty()
     description = StringProperty()
-    date_established = DateProperty()
+    date_established = DateNeo4jFormatProperty()
     jurisdiction = StringProperty(choices=Jurisdiction.choices())
 
     # Relationships

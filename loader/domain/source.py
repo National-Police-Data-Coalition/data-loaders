@@ -4,7 +4,7 @@ from datetime import datetime
 from neomodel import (
     AsyncStructuredNode, AsyncStructuredRel,
     AsyncRelationshipTo, AsyncRelationshipFrom,
-    StringProperty, DateTimeProperty,
+    StringProperty, DateTimeNeo4jFormatProperty,
     UniqueIdProperty, BooleanProperty,
     EmailProperty, JSONProperty
 )
@@ -75,7 +75,7 @@ class SourceMember(AsyncStructuredRel):
 
     uid = UniqueIdProperty()
     role = StringProperty(choices=MemberRole.choices(), required=True)
-    date_joined = DateTimeProperty(default=datetime.now())
+    date_joined = DateTimeNeo4jFormatProperty(default_now=True)
     is_active = BooleanProperty(default=True)
 
     @property
@@ -104,8 +104,8 @@ class SourceMember(AsyncStructuredRel):
 
 
 class Citation(AsyncStructuredRel):
-    timestamp = DateTimeProperty(
-        default=datetime.now(),
+    timestamp = DateTimeNeo4jFormatProperty(
+        default_now=True,
         index=True
     )
     url = StringProperty()

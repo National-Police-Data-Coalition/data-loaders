@@ -1,6 +1,7 @@
 """Define the SQL classes for Users."""
 
 from loader.domain.types.enums import PropertyEnum
+from loader.domain.properties.datetime import DateNeo4jFormatProperty
 from neomodel import (
     AsyncRelationship, AsyncStructuredNode,
     StringProperty, DateProperty, BooleanProperty,
@@ -41,7 +42,7 @@ class User(AsyncStructuredNode):
     # User authentication information. The collation="NOCASE" is required
     # to search case insensitively when USER_IFIND_MODE is "nocase_collation".
     email = EmailProperty(required=True, unique_index=True)
-    email_confirmed_at = DateProperty()
+    email_confirmed_at = DateNeo4jFormatProperty()
     password_hash = StringProperty(required=True)
 
     # User information

@@ -1,5 +1,6 @@
 """Define the Classes for Complaints."""
 from loader.domain.types.enums import PropertyEnum
+from loader.domain.properties.datetime import DateNeo4jFormatProperty
 from loader.domain.source import Citation
 from neomodel import (
     AsyncStructuredNode,
@@ -28,13 +29,13 @@ class ComplaintSourceRel(AsyncStructuredRel):
         choices=RecordType.choices(),
         required=True
     )
-    date_published = DateProperty()
+    date_published = DateNeo4jFormatProperty()
 
     # Legal Source Properties
     court = StringProperty()
     judge = StringProperty()
     docket_number = StringProperty()
-    case_event_date = DateProperty()
+    case_event_date = DateNeo4jFormatProperty()
 
     # News Source Properties
     publication_name = StringProperty()
@@ -69,9 +70,9 @@ class Complaint(AsyncStructuredNode):
     record_id = StringProperty(index=True)
     complaint_key = StringProperty(unique_index=True)
     category = StringProperty()
-    incident_date = DateProperty(index=True)
-    received_date = DateProperty(index=True)
-    closed_date = DateProperty(index=True)
+    incident_date = DateNeo4jFormatProperty(index=True)
+    received_date = DateNeo4jFormatProperty(index=True)
+    closed_date = DateNeo4jFormatProperty(index=True)
     reason_for_contact = StringProperty()
     outcome_of_contact = StringProperty()
 
@@ -114,8 +115,8 @@ class Allegation(AsyncStructuredNode):
 
 class Investigation(AsyncStructuredNode):
     uid = UniqueIdProperty()
-    start_date = DateProperty()
-    end_date = DateProperty()
+    start_date = DateNeo4jFormatProperty()
+    end_date = DateNeo4jFormatProperty()
 
     # Relationships
     investigator = AsyncRelationship("loader.domain.officer.Officer", "LED_BY")
@@ -129,7 +130,7 @@ class Investigation(AsyncStructuredNode):
 class Penalty(AsyncStructuredNode):
     uid = UniqueIdProperty()
     penalty = StringProperty()
-    date_assessed = DateProperty()
+    date_assessed = DateNeo4jFormatProperty()
     crb_plea = StringProperty()
     crb_case_status = StringProperty()
     crb_disposition = StringProperty()

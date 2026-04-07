@@ -1,4 +1,5 @@
 from loader.domain.types.enums import PropertyEnum
+from loader.domain.properties.datetime import DateNeo4jFormatProperty
 from neomodel import (
     AsyncStructuredNode,
     StringProperty,
@@ -32,8 +33,8 @@ class Litigation(AsyncStructuredNode):
     jurisdiction = StringProperty()
     state = StringProperty()
     description = StringProperty()
-    start_date = DateProperty()
-    settlement_date = DateProperty()
+    start_date = DateNeo4jFormatProperty()
+    settlement_date = DateNeo4jFormatProperty()
     settlement_amount = StringProperty()
     url = StringProperty()
     case_type = StringProperty(choices=LegalCaseType.choices())
@@ -56,5 +57,5 @@ class Document(AsyncStructuredNode):
 
 class Disposition(AsyncStructuredNode):
     description = StringProperty()
-    date = DateProperty()
+    date = DateNeo4jFormatProperty()
     disposition = StringProperty()
