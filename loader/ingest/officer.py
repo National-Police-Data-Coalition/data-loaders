@@ -6,6 +6,7 @@ from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
+from loader.utils.coercion import build_props_map
 
 
 PREFETCH_CYPHER = """
@@ -156,14 +157,14 @@ COMMAND_ASSIGNMENT_FIELDS = (
 )
 
 
-def build_props_map(data: dict[str, Any], fields) -> dict[str, Any]:
-    # only include non-null keys so SET a += props won't overwrite with nulls
-    props: dict[str, Any] = {}
-    for k in fields:
-        v = data.get(k)
-        if v is not None:
-            props[k] = v
-    return props
+# def build_props_map(data: dict[str, Any], fields) -> dict[str, Any]:
+#     # only include non-null keys so SET a += props won't overwrite with nulls
+#     props: dict[str, Any] = {}
+#     for k in fields:
+#         v = data.get(k)
+#         if v is not None:
+#             props[k] = v
+#     return props
 
 
 @register("officer")
@@ -178,7 +179,7 @@ async def upsert_officer_batch(
     incoming_by_id: dict[int, dict[str, Any]] = {}
     incoming_emps_by_id = {}
 
-    output = 0
+    output = 5
     dropped_e_expired = dropped_e_bad = dropped_e_unit = 0
 
     for i, item in enumerate(batch):

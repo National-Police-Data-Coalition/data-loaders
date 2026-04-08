@@ -17,7 +17,7 @@ from loader.domain.infra.locations import (
     STATE_INFO
 )
 
-cfg = dotenv_values(".env")
+cfg = dotenv_values(".env.cloud")
 
 log_path = "_loc.log"
 log_path = datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + log_path

@@ -26,8 +26,6 @@ from loader.db.runner import load_model_group
 # Config and logging
 # ------------------------------------------------------------
 
-load_dotenv()
-
 def env(name: str, default: str | None = None) -> str | None:
     return os.getenv(name, default)
 
@@ -184,6 +182,7 @@ async def load_jsonl_to_neo4j(
 @dataclass
 class Args:
     cmd: str
+    env_file: str
     input_file: str
     logging: str | None
     batch_size: int
@@ -192,9 +191,18 @@ class Args:
 
 
 def parse_args(argv: Sequence[str] | None = None) -> Args:
+    def add_env_file_argument(parser: argparse.ArgumentParser) -> None:
+        parser.add_argument(
+            "--env-file",
+            type=str,
+            default=argparse.SUPPRESS,
+            help="Environment file to load before connecting to Neo4j (default: .env)",
+        )
+
     parser = argparse.ArgumentParser(
         prog="loader",
         description="JSONL -> Neo4j loader")
+    add_env_file_argument(parser)
     subparsers = parser.add_subparsers(
         dest="cmd", required=True)
     
@@ -202,6 +210,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Args:
     load_parser = subparsers.add_parser(
         "load",
         help="Load data from JSONL file to Neo4j")
+    add_env_file_argument(load_parser)
 
     load_parser.add_argument(
         "input_file",
@@ -238,6 +247,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Args:
         "install-labels",
         help="Install Neo4j schema labels/indexes"
     )
+    add_env_file_argument(install_parser)
     install_parser.add_argument(
         "-l",
         "--logging",
@@ -246,6 +256,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Args:
     )
 
     ns = parser.parse_args(argv)
+    env_file = getattr(ns, "env_file", ".env")
 
     if ns.logging and ns.logging.upper() not in {
         "DEBUG",
@@ -264,6 +275,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Args:
 
         return Args(
             cmd=ns.cmd,
+            env_file=env_file,
             input_file=ns.input_file,
             logging=ns.logging,
             batch_size=ns.batch_size,
@@ -273,12 +285,18 @@ def parse_args(argv: Sequence[str] | None = None) -> Args:
     elif ns.cmd == "install-labels":
         return Args(
             cmd=ns.cmd,
+            env_file=env_file,
             input_file="",
             logging=ns.logging,
             batch_size=0,
             concurrency=0,
             stop_on_error=False,
         )
+
+
+def load_env_file(env_file: str) -> None:
+    if not load_dotenv(env_file):
+        raise SystemExit(f"Environment file not found or unreadable: {env_file}")
 
 
 async def async_main(args: Args) -> int:
@@ -322,6 +340,7 @@ async def async_main(args: Args) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    load_env_file(args.env_file)
     return asyncio.run(async_main(args))
 
 

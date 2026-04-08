@@ -157,7 +157,7 @@ async def upsert_allegation_batch(
             continue
 
         # Resolve complaint_key for prefetch
-        complaint_key = source_uid + ":" + complaint_id
+        complaint_key = f"{source_uid}:{complaint_id}"
 
         officer_id_name = officer_sid.get("id_name")
         officer_id_value = officer_sid.get("value")

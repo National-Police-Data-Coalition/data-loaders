@@ -6,6 +6,7 @@ from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
+from datetime import date, datetime
 
 
 PREFETCH_CYPHER = """
@@ -14,7 +15,7 @@ UNWIND $rows AS row
 MATCH (s:Source {uid: row.source_uid})
 
 // Resolve the Complaint
-OPTIONAL MATCH (s)<-[:HAS_SOURCE]-(c:Complaint { record_id: row.record_id })
+OPTIONAL MATCH (c:Complaint {complaint_key: row.complaint_key})
 OPTIONAL MATCH (c)-[:OCCURRED_IN]->(l:Location)
 
 // Complaint freshness
@@ -26,7 +27,6 @@ CALL (c, s) {
 
 RETURN {
   row_id: row.row_id,
-  complaint: CASE WHEN c IS NULL THEN NULL ELSE c.uid END,
   exists: c IS NOT NULL,
   existing: CASE WHEN c IS NULL THEN NULL ELSE properties(c) END,
   existing_loc: CASE WHEN c IS NULL THEN NULL ELSE properties(l) END,
@@ -38,7 +38,7 @@ UPSERT_CYPHER = """
 UNWIND $rows AS row
 MATCH (s:Source {uid: row.source_uid})
 // Merge Complaint node
-MERGE (s)<-[rel:HAS_SOURCE]-(c:Complaint {record_id: row.record_id})
+MERGE (c:Complaint {complaint_key: row.complaint_key})-[rel:HAS_SOURCE]->(s)
 ON CREATE SET c.uid = replace(randomUUID(), "-", "")
 SET 
   c += row.props,
@@ -83,6 +83,7 @@ RETURN count(*) AS applied
 """
 
 COMPLAINT_FIELDS = (
+    "record_id",
     "category",
     "incident_date",
     "received_date",
@@ -138,10 +139,74 @@ COMMAND_ASSIGNMENT_FIELDS = (
 )
 
 
+def to_neo4j_date(value: Any) -> date | None:
+    """
+    Convert an incoming value into a Python date object suitable for Neo4j.
+
+    Supported inputs:
+    - datetime.date -> returned as-is
+    - datetime.datetime -> converted with .date()
+    - strings like:
+        - YYYY-MM-DD
+        - YYYY-MM-DD HH:MM:SS
+        - YYYY-MM-DDTHH:MM:SS
+        - ISO-like timestamps ending in Z
+    - None or blank strings -> None
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+
+    if isinstance(value, datetime):
+        return value.date()
+
+    if isinstance(value, str):
+        s = value.strip()
+        if not s:
+            return None
+
+        # First try the plain date format directly
+        try:
+            return date.fromisoformat(s)
+        except ValueError:
+            pass
+
+        # Normalize common ISO datetime variants
+        normalized = s.replace("Z", "+00:00")
+
+        # Try parsing as a datetime, then take the date part
+        try:
+            return datetime.fromisoformat(normalized).date()
+        except ValueError:
+            pass
+
+        # Fallback for common "YYYY-MM-DD HH:MM:SS" without timezone issues
+        for fmt in (
+            "%Y-%m-%d %H:%M:%S",
+            "%Y-%m-%d %H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S",
+            "%Y-%m-%dT%H:%M:%S.%f",
+        ):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+
+    raise ValueError(f"Could not parse date value: {value!r}")
+
+
 def build_props_map(data: dict[str, Any], fields) -> dict[str, Any]:
     # only include non-null keys so SET a += props won't overwrite with nulls
     props: dict[str, Any] = {}
     for k in fields:
+        # For dates, use Neo4j's date/datetime
+        if k.endswith("_date"):
+            v = data.get(k)
+            if v is not None:
+                props[k] = to_neo4j_date(v)
+            continue
         v = data.get(k)
         if v is not None:
             props[k] = v
@@ -173,6 +238,7 @@ async def upsert_complaint_batch(
 
         # Source
         source_uid = item.get("source_uid")
+        complaint_key = f"{source_uid}:{record_id}"
         url = item.get("url")
         scraped_at = item.get("scraped_at")
         if not (source_uid and url and scraped_at):
@@ -181,7 +247,7 @@ async def upsert_complaint_batch(
         scraped_dt = parse_scraped_at(scraped_at)
         row = {
             "row_id": i,
-            "record_id": record_id,
+            "complaint_key": complaint_key,
             "source_uid": source_uid,
             "url": url,
             "scraped_dt": scraped_dt,
@@ -192,7 +258,7 @@ async def upsert_complaint_batch(
 
         if i < output:
             log.info(f"Incoming row {i}:")
-            log.info(row["record_id"])
+            log.info(row["complaint_key"])
     if not input_rows:
         return
 
@@ -203,7 +269,6 @@ async def upsert_complaint_batch(
         record = rec["record"]
         row_id = int(record["row_id"])
         prefetch[row_id] = (
-            record["complaint"],
             bool(record["exists"]),
             record["existing"],
             record["existing_loc"],
@@ -211,7 +276,7 @@ async def upsert_complaint_batch(
         )
         if row_id < output:
             log.info(f"Prefetched record for row {row_id}:")
-            log.info(json.dumps(record))
+            log.info(record)
     await results.consume()
     log.info("Prefetch complete.")
     log.info(f"Prefetched {len(prefetch)} complaint records.")
@@ -223,8 +288,8 @@ async def upsert_complaint_batch(
         row_id = int(r["row_id"])
         incoming_data = incoming_by_id[row_id]
 
-        uid, exists, existing_map, existing_loc_map, last_ts = prefetch.get(
-            row_id, (None, False, None, None, None))
+        exists, existing_map, existing_loc_map, last_ts = prefetch.get(
+            row_id, (False, None, None, None))
 
         # Freshness gate: skip if we already have a citation from
         # this source+url at or after this scraped time.
@@ -239,7 +304,6 @@ async def upsert_complaint_batch(
         base_apply = {
             **r,
             "props": props,
-            "uid": uid,
             "loc_props": loc_props,
             "source_rel_props": source_rel_props,
         }
