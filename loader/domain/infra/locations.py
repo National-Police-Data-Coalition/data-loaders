@@ -5,7 +5,7 @@ from neomodel import (
     UniqueIdProperty,
     AsyncRelationship,
     AsyncRelationshipTo,
-    ZeroOrOne, One
+    ZeroOrOne, AsyncOne
 )
 from neomodel.contrib.spatial_properties import PointProperty
 
@@ -84,11 +84,26 @@ class Place(AsyncStructuredNode):
         return f"<Place {self.name}>"
 
 
+class Located:
+    """Mixin for models located in a city."""
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not issubclass(cls, AsyncStructuredNode):
+            raise TypeError(
+                f"{cls.__name__} mixes in Located "
+                "but does not inherit AsyncStructuredNode"
+            )
+
+    city_node = AsyncRelationshipTo(
+        "loader.domain.infra.locations.CityNode", "LOCATED_IN")
+
+
 class StateNode(Place):
     abbreviation = StringProperty(required=True, unique_index=True)
 
     # Relationships
-    capitol = AsyncRelationship("CityNode", "IS_CAPITOL", cardinality=ZeroOrOne)
+    capitol = AsyncRelationship("CityNode", "CAPITOL_OF", cardinality=ZeroOrOne)
 
     def __repr__(self):
         return f"<State {self.name}>"
@@ -98,7 +113,7 @@ class CountyNode(Place):
     fips = StringProperty(required=True, unique_index=True)
 
     # Relationships
-    state = AsyncRelationshipTo("StateNode", "WITHIN_STATE", cardinality=One)
+    state = AsyncRelationshipTo("StateNode", "WITHIN_STATE", cardinality=AsyncOne)
 
     def __repr__(self):
         return f"<County {self.name}>"
@@ -109,7 +124,7 @@ class CityNode(Place):
     sm_id = StringProperty(unique_index=True)  # SimpleMaps ID
 
     # Relationships
-    county = AsyncRelationshipTo("CountyNode", "WITHIN_COUNTY", cardinality=One)
+    county = AsyncRelationshipTo("CountyNode", "WITHIN_COUNTY", cardinality=AsyncOne)
 
     def __repr__(self):
         return f"<City {self.name}>"
@@ -117,7 +132,7 @@ class CityNode(Place):
 
 class PrecinctNode(Place):
     # Relationships
-    city = AsyncRelationshipTo("CityNode", "WITHIN_CITY", cardinality=One)
+    city = AsyncRelationshipTo("CityNode", "WITHIN_CITY", cardinality=AsyncOne)
 
     def __repr__(self):
         return f"<Precinct {self.name}>"

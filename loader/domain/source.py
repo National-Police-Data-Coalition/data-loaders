@@ -3,11 +3,14 @@ from loader.domain.types.enums import PropertyEnum
 from datetime import datetime
 from neomodel import (
     AsyncStructuredNode, AsyncStructuredRel,
-    AsyncRelationshipTo, AsyncRelationshipFrom,
+    AsyncRelationship, AsyncRelationshipTo, AsyncRelationshipFrom,
     StringProperty, DateTimeProperty,
     UniqueIdProperty, BooleanProperty,
-    EmailProperty, JSONProperty
+    EmailProperty,
+    AsyncZeroOrOne, AsyncOne
 )
+
+from loader.domain.contact import EmailContact, SocialMediaContact
 
 
 class MemberRole(str, PropertyEnum):
@@ -103,32 +106,72 @@ class SourceMember(AsyncStructuredRel):
         id={self.uid}>"
 
 
-class Citation(AsyncStructuredRel):
+class Change(AsyncStructuredNode):
+    uid = UniqueIdProperty()
     timestamp = DateTimeProperty(
-        default=datetime.now(),
+        default_now=True,
         index=True
     )
     url = StringProperty()
-    user_uid = StringProperty()
-    diff = JSONProperty()
+    diff = StringProperty()
+
+    source = AsyncRelationshipTo(
+        'loader.domain.source.Source',
+        "ATTRIBUTED_TO",
+        cardinality=AsyncOne
+    )
+    user = AsyncRelationshipTo(
+        "loader.domain.user.User",
+        "MADE_BY",
+        cardinality=AsyncZeroOrOne
+    )
 
     def __repr__(self):
         """Represent instance as a unique string."""
-        return f"<Citation {self.timestamp}>"
+        return f"<Change {self.timestamp}>"
 
-    # @property
-    # def diffs(self):
-    #     """Read-only access to diffs."""
-    #     return self._diffs
+    def serialize(self):
+        return {
+            "uid": self.uid,
+            "timestamp": self.timestamp,
+            "url": self.url,
+            "diff": self.diff,
+            "source": self.source,
+            "user": self.user,
+        }
 
-    # def add_diff(self, url: str, diff: dict, timestamp: datetime):
-    #     new_diff = json.loads({
-    #         "url": url,
-    #         "diff": diff,
-    #         "timestamp": timestamp.isoformat()
-    #     })
-    #     self._diffs.append(new_diff)
-    #     self.save()
+
+class HasCitations:
+    """Mixin for models whose changes are attributed to a Source."""
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not issubclass(cls, AsyncStructuredNode):
+            raise TypeError(
+                f"{cls.__name__} mixes in HasCitations "
+                "but does not inherit AsyncStructuredNode"
+            )
+
+    changes = AsyncRelationshipFrom("loader.domain.source.Change", "CHANGE_TO")
+
+    async def add_change(
+        self,
+        source: "Source",
+        user: "loader.domain.user.User" | None = None,
+        diff: str | None = None,
+        url: str | None = None,
+    ) -> Change:
+        change = await Change(
+            timestamp=datetime.now(),
+            diff=diff,
+            url=url,
+        ).save()
+
+        await change.source.connect(source)
+        if user is not None:
+            await change.user.connect(user)
+        await self.changes.connect(change)
+        return change
 
 
 class Source(AsyncStructuredNode):
@@ -140,9 +183,15 @@ class Source(AsyncStructuredNode):
 
     name = StringProperty(unique_index=True)
     url = StringProperty()
-    contact_email = StringProperty(required=True)
+    description = StringProperty(max_length=500)
 
     # Relationships
+    primary_email = AsyncRelationship(
+        EmailContact, "HAS_CONTACT_EMAIL", cardinality=AsyncOne
+    )
+    social_media = AsyncRelationship(
+        SocialMediaContact, "HAS_SOCIAL_MEDIA_CONTACT", cardinality=AsyncZeroOrOne
+    )
     members = AsyncRelationshipFrom(
         "loader.domain.user.User",
         "IS_MEMBER", model=SourceMember)

@@ -1,18 +1,17 @@
 from datetime import date
 from loader.utils.query import RelQuery
 from loader.domain.types.enums import State, PropertyEnum
-from loader.domain.infra.locations import StateNode, CountyNode, CityNode
-from loader.domain.source import Citation
+from loader.domain.infra.locations import Located
 from loader.domain.officer import Officer
+from loader.domain.source import HasCitations
 
 from neomodel import (
     AsyncStructuredNode,
     StringProperty,
     AsyncRelationship,
-    AsyncRelationshipTo,
     DateProperty,
     UniqueIdProperty,
-    One,
+    AsyncOne,
     adb
 )
 
@@ -26,7 +25,7 @@ class Jurisdiction(str, PropertyEnum):
     OTHER = "OTHER"
 
 
-class Unit(AsyncStructuredNode):
+class Unit(AsyncStructuredNode, HasCitations, Located):
     uid = UniqueIdProperty()
     name = StringProperty(required=True, index=True)
     hq_state = StringProperty(choices=State.choices(), required=True)
@@ -40,11 +39,7 @@ class Unit(AsyncStructuredNode):
     date_established = DateProperty()
 
     # Relationships
-    agency = AsyncRelationship("Agency", "ESTABLISHED_BY", cardinality=One)
-    citations = AsyncRelationshipTo(
-        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
-    city_node = AsyncRelationshipTo(
-        "loader.domain.infra.locations.CityNode", "WITHIN_CITY")
+    agency = AsyncRelationship("Agency", "ESTABLISHED_BY", cardinality=AsyncOne)
 
     def __repr__(self):
         return f"<Unit {self.name}>"
@@ -56,9 +51,9 @@ class Unit(AsyncStructuredNode):
             Source: The primary source node for this unit.
         """
         cy = """
-        MATCH (o:Unit {uid: $uid})-[r:UPDATED_BY]->(s:Source)
+        MATCH (o:Unit {uid: $uid})<-[:CHANGE_TO]-(c:Change)-[:ATTRIBUTED_TO]->(s:Source)
         RETURN s
-        ORDER BY r.date DESC
+        ORDER BY c.timestamp DESC
         LIMIT 1;
         """
         result, meta = await adb.cypher_query(cy, {'uid': self.uid}, resolve_objects=True)
@@ -67,7 +62,7 @@ class Unit(AsyncStructuredNode):
             return source_node
         return None
 
-class Agency(AsyncStructuredNode):
+class Agency(AsyncStructuredNode, HasCitations, Located):
     uid = UniqueIdProperty()
     name = StringProperty(required=True, index=True)
     hq_state = StringProperty(choices=State.choices(), required=True)
@@ -80,12 +75,6 @@ class Agency(AsyncStructuredNode):
     description = StringProperty()
     date_established = DateProperty()
     jurisdiction = StringProperty(choices=Jurisdiction.choices())
-
-    # Relationships
-    citations = AsyncRelationshipTo(
-        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
-    city_node = AsyncRelationshipTo(
-        "loader.domain.infra.locations.CityNode", "LOCATED_IN")
 
     def __repr__(self):
         return f"<Agency {self.name}>"
