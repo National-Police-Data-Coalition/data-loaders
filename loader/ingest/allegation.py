@@ -5,6 +5,7 @@ import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
+from .change import latest_change_timestamp_cypher, merge_change_cypher
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -27,11 +28,9 @@ OPTIONAL MATCH (:StateID {
 })<-[:HAS_STATE_ID]-(officer:Officer)
 
 // Allegation freshness
-CALL (a, s) {
-  OPTIONAL MATCH (a)-[cit:UPDATED_BY]->(s)
-  // WHERE cit.user_uid IS NULL
-  RETURN max(cit.timestamp) AS last_ts
-}
+""" + latest_change_timestamp_cypher(
+    "a", "s", change_alias="allegation_change", legacy_alias="allegation_cit"
+) + """
 
 RETURN {
   row_id: row.row_id,
@@ -55,13 +54,7 @@ ON CREATE SET a.uid = replace(randomUUID(), "-", "")
 SET 
   a += row.props
 
-MERGE (a)-[cit:UPDATED_BY {
-  timestamp: datetime(row.scraped_dt),
-  url: coalesce(row.url, \"\")
-}]->(s)
-SET
-  cit.user_uid = NULL,
-  cit.diff = row.diff
+""" + merge_change_cypher("a", "s", "allegation_change") + """
 
 // Connect Officer
 WITH a, row, s
@@ -77,13 +70,9 @@ SET
   civ += row.civ_props
 
 WITH civ, row, s
-MERGE (civ)-[civ_cit:UPDATED_BY {
-  timestamp: datetime(row.scraped_dt),
-  url: coalesce(row.url, \"\")
-}]->(s)
-SET
-  civ_cit.user_uid = NULL,
-  civ_cit.diff = row.diff
+""" + merge_change_cypher(
+    "civ", "s", "civilian_change", diff_expr="row.civ_diff"
+) + """
 
 RETURN count(*) AS applied
 """
@@ -132,7 +121,7 @@ async def upsert_allegation_batch(
 
     for i, item in enumerate(batch):
         fields = item.get("data") or {}
-        officer_sid = item.get("officer_state_id")
+        officer_sid = item.get("officer_state_id") or {}
         complainant = item.get("complainant") or {}
 
 

@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
+from .change import latest_change_timestamp_cypher, merge_change_cypher
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
 
-PREFETCH_CYPHER = """
+PREFETCH_CYPHER = f"""
 UNWIND $rows AS row
-OPTIONAL MATCH (a:Agency {name: row.name, hq_state: row.hq_state})
-MATCH (s:Source {uid: row.source_uid})
-OPTIONAL MATCH (a)-[c:UPDATED_BY]->(s)
-// WHERE c.user_uid IS NULL            // ignore user-created updates
-WITH row, a, max(c.timestamp) AS last_ts
+OPTIONAL MATCH (a:Agency {{name: row.name, hq_state: row.hq_state}})
+MATCH (s:Source {{uid: row.source_uid}})
+{latest_change_timestamp_cypher("a", "s", change_alias="agency_change", legacy_alias="agency_cit")}
+WITH row, a, last_ts
 RETURN
   row.row_id AS row_id,
   a IS NOT NULL AS exists,
@@ -23,32 +22,26 @@ RETURN
   last_ts AS last_ts
 """
 
-UPSERT_CYPHER = """
+UPSERT_CYPHER = f"""
 UNWIND $rows AS row
-MATCH (s:Source {uid: row.source_uid})
-MERGE (a:Agency {name: row.name, hq_state: row.hq_state})
-  <-[:ESTABLISHED_BY]-(u:Unit {name: "Unknown", hq_state: row.hq_state})
+MATCH (s:Source {{uid: row.source_uid}})
+MERGE (a:Agency {{name: row.name, hq_state: row.hq_state}})
+  <-[:ESTABLISHED_BY]-(u:Unit {{name: "Unknown", hq_state: row.hq_state}})
 ON CREATE SET
   a.uid = replace(randomUUID(), "-", ""),
   u.uid = replace(randomUUID(), "-", "")
 SET a += row.props
 
-MERGE (a)-[cit:UPDATED_BY {
-  timestamp: datetime(row.scraped_dt),
-  url: coalesce(row.url, \"\")
-}]->(s)
-SET
-  cit.user_uid = NULL,
-  cit.diff = row.diff
+{merge_change_cypher("a", "s", "agency_change")}
 
 // Location link
 WITH a, row
-OPTIONAL MATCH (st:StateNode {abbreviation: row.hq_state})
+OPTIONAL MATCH (st:StateNode {{abbreviation: row.hq_state}})
 
 WITH a, row, st
 WHERE st IS NOT NULL AND row.hq_city IS NOT NULL
 
-OPTIONAL MATCH (c:CityNode {name: row.hq_city})-[]-(:CountyNode)-[]-(st)
+OPTIONAL MATCH (c:CityNode {{name: row.hq_city}})-[]-(:CountyNode)-[]-(st)
 WITH a, row, c
 
 FOREACH (_ IN CASE WHEN c IS NULL THEN [] ELSE [1] END |
@@ -176,7 +169,7 @@ async def upsert_agency_batch(
 
         to_apply.append({
             **base_apply,
-            "diff": json.loads(diff.to_json()),
+            "diff": diff.to_json(),
         })
 
     if not to_apply:

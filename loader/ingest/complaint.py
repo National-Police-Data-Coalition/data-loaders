@@ -5,6 +5,7 @@ import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
+from .change import latest_change_timestamp_cypher, merge_change_cypher
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -18,11 +19,9 @@ OPTIONAL MATCH (s)<-[:HAS_SOURCE]-(c:Complaint { record_id: row.record_id })
 OPTIONAL MATCH (c)-[:OCCURRED_IN]->(l:Location)
 
 // Complaint freshness
-CALL (c, s) {
-  OPTIONAL MATCH (c)-[cit:UPDATED_BY]->(s)
-  // WHERE cit.user_uid IS NULL
-  RETURN max(cit.timestamp) AS last_ts
-}
+""" + latest_change_timestamp_cypher(
+    "c", "s", change_alias="complaint_change", legacy_alias="complaint_cit"
+) + """
 
 RETURN {
   row_id: row.row_id,
@@ -45,13 +44,7 @@ SET
   rel += row.source_rel_props
 
 
-MERGE (c)-[cit:UPDATED_BY {
-  timestamp: datetime(row.scraped_dt),
-  url: coalesce(row.url, \"\")
-}]->(s)
-SET
-  cit.user_uid = NULL,
-  cit.diff = row.diff
+""" + merge_change_cypher("c", "s", "complaint_change") + """
 
 // Location node
 WITH s, c, row
@@ -59,13 +52,9 @@ CALL (s, c, row) {
   MERGE (c)-[:OCCURRED_IN]->(l:Location)
   SET l += row.loc_props
 
-  MERGE (l)-[l_cit:UPDATED_BY {
-    timestamp: datetime(row.scraped_dt),
-    url: coalesce(row.url, \"\")
-  }]->(s)
-  SET
-    l_cit.user_uid = NULL,
-    l_cit.diff = row.loc_diff
+""" + merge_change_cypher(
+    "l", "s", "location_change", diff_expr="row.loc_diff"
+) + """
 
   WITH l
   OPTIONAL MATCH (st:StateNode {abbreviation: l.state})
@@ -249,12 +238,13 @@ async def upsert_complaint_batch(
             to_apply.append({
                 **base_apply,
                 "diff": None,
+                "loc_diff": None,
             })
             continue
 
         # Existing: only write if there are meaningful diffs
-        diff = detect_diff_dict(existing_map or {}, incoming_data)
-        loc_diff = detect_diff_dict(existing_loc_map or {}, incoming_data.get("location", {}))
+        diff = detect_diff_dict(existing_map or {}, props)
+        loc_diff = detect_diff_dict(existing_loc_map or {}, loc_props)
         if not diff and not loc_diff:
             dropped_expired += 1
             continue
