@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Sequence
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from neo4j import AsyncGraphDatabase
-from neomodel import config, adb
+from neomodel import config
 
 import loader.ingest # noqa: F401
 from loader.ingest.base import REGISTRY
@@ -26,10 +26,38 @@ from loader.db.runner import load_model_group
 # Config and logging
 # ------------------------------------------------------------
 
-load_dotenv()
+DOTENV_PATH = find_dotenv(usecwd=True)
+load_dotenv(DOTENV_PATH or None)
 
 def env(name: str, default: str | None = None) -> str | None:
     return os.getenv(name, default)
+
+
+def graph_settings() -> tuple[str, str, str, str]:
+    user = env("GRAPH_USER", "neo4j")
+    password = env("GRAPH_PASSWORD")
+    uri = env("GRAPH_NM_URI")
+    scheme = env("GRAPH_SCHEME", "bolt")
+
+    if not all([user, password, uri]):
+        raise RuntimeError(
+            "Missing Graph connection info in environment variables."
+        )
+
+    return scheme, uri, user, password
+
+
+def log_graph_settings() -> None:
+    scheme, uri, user, password = graph_settings()
+    dotenv_source = DOTENV_PATH or "not found"
+    logging.info("Dotenv source: %s", dotenv_source)
+    logging.info(
+        "Neo4j target: %s://%s user=%s password_set=%s",
+        scheme,
+        uri,
+        user,
+        bool(password),
+    )
 
 
 def parse_bool(s: str | None, default: bool = False) -> bool:
@@ -93,37 +121,14 @@ def setup_logging(level_name: str | None = None) -> None:
 def configure_neomodel() -> None:
     """Configure neomodel connection.
     """
-
-    neo_url = "bolt://{user}:{pw}@{uri}".format(
-        user=env("GRAPH_USER", "neo4j"),
-        pw=env("GRAPH_PASSWORD"),
-        uri=env("GRAPH_NM_URI")
-    )
-    config.DATABASE_URL = neo_url
-
-    user = env("GRAPH_USER", "neo4j")
-    password = env("GRAPH_PASSWORD")
-    uri = env("GRAPH_NM_URI")
-    scheme = env("GRAPH_SCHEME", "bolt")
-
-    if not all([user, password, uri]):
-        raise RuntimeError(
-            "Missing Graph connection info in environment variables."
-        )
+    scheme, uri, user, password = graph_settings()
     database_url = f"{scheme}://{user}:{password}@{uri}"
 
     config.DATABASE_URL = database_url
 
 
 def make_driver(concurrency: int = 4) -> AsyncGraphDatabase.driver:
-    user = env("GRAPH_USER", "neo4j")
-    password = env("GRAPH_PASSWORD")
-    uri = env("GRAPH_NM_URI")
-    scheme = env("GRAPH_SCHEME", "bolt")
-    if not all([user, password, uri]):
-        raise RuntimeError(
-            "Missing Graph connection info in environment variables."
-        )
+    scheme, uri, user, password = graph_settings()
     return AsyncGraphDatabase.driver(
         f"{scheme}://{uri}",
         auth=(
@@ -132,6 +137,14 @@ def make_driver(concurrency: int = 4) -> AsyncGraphDatabase.driver:
         ),
         max_connection_pool_size=concurrency * 2,
     )
+
+
+async def verify_driver_connection(driver: AsyncGraphDatabase.driver) -> None:
+    async with driver.session() as session:
+        result = await session.run("RETURN 1 AS ok")
+        record = await result.single()
+        if record is None or record["ok"] != 1:
+            raise RuntimeError("Neo4j connection check returned an unexpected result.")
 
 
 # ------------------------------------------------------------
@@ -285,25 +298,25 @@ async def async_main(args: Args) -> int:
     listener = setup_logging(args.logging)
     try:
         configure_neomodel()
-        driver = make_driver(args.concurrency)
-
+        log_graph_settings()
 
         if args.cmd == "install-labels":
             await install_schema()
             return 0
 
         # Verify Neo4j connection
-        try:
-            await adb.cypher_query("RETURN 1")
-            logging.info("Successfully connected to Neo4j")
-        except Exception as e:
-            logging.error("Failed to connect to Neo4j: %s", e)
-            print(f"Failed to connect to Neo4j: {e}", file=sys.stderr)
-            return 1
-        
-        logging.info("Starting data load process")
+        driver = make_driver(args.concurrency)
         try:
             async with driver:
+                try:
+                    await verify_driver_connection(driver)
+                except Exception as e:
+                    logging.error("Failed to connect to Neo4j: %s", e)
+                    print(f"Failed to connect to Neo4j: {e}", file=sys.stderr)
+                    return 1
+
+                logging.info("Successfully connected to Neo4j")
+                logging.info("Starting data load process")
                 await load_jsonl_to_neo4j(
                     args.input_file,
                     batch_size=args.batch_size,
