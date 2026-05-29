@@ -3,20 +3,11 @@ def latest_change_timestamp_cypher(
     source_alias: str,
     result_alias: str = "last_ts",
     change_alias: str = "change",
-    legacy_alias: str = "legacy_cit",
 ) -> str:
     return f"""
 CALL ({node_alias}, {source_alias}) {{
   OPTIONAL MATCH ({node_alias})<-[:CHANGE_TO]-({change_alias}:Change)-[:ATTRIBUTED_TO]->({source_alias})
-  WITH {node_alias}, {source_alias}, max({change_alias}.timestamp) AS change_ts
-  OPTIONAL MATCH ({node_alias})-[{legacy_alias}:UPDATED_BY]->({source_alias})
-  WITH change_ts, max({legacy_alias}.timestamp) AS legacy_ts
-  RETURN CASE
-    WHEN change_ts IS NULL THEN legacy_ts
-    WHEN legacy_ts IS NULL THEN change_ts
-    WHEN change_ts > legacy_ts THEN change_ts
-    ELSE legacy_ts
-  END AS {result_alias}
+  RETURN max({change_alias}.timestamp) AS {result_alias}
 }}
 """
 

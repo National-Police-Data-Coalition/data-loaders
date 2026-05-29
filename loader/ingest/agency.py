@@ -13,7 +13,7 @@ PREFETCH_CYPHER = f"""
 UNWIND $rows AS row
 OPTIONAL MATCH (a:Agency {{name: row.name, hq_state: row.hq_state}})
 MATCH (s:Source {{uid: row.source_uid}})
-{latest_change_timestamp_cypher("a", "s", change_alias="agency_change", legacy_alias="agency_cit")}
+{latest_change_timestamp_cypher("a", "s", change_alias="agency_change")}
 WITH row, a, last_ts
 RETURN
   row.row_id AS row_id,

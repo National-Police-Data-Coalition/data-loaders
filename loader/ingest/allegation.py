@@ -29,7 +29,7 @@ OPTIONAL MATCH (:StateID {
 
 // Allegation freshness
 """ + latest_change_timestamp_cypher(
-    "a", "s", change_alias="allegation_change", legacy_alias="allegation_cit"
+    "a", "s", change_alias="allegation_change"
 ) + """
 
 RETURN {
