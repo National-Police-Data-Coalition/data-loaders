@@ -1,61 +1,54 @@
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
+from .change import latest_change_timestamp_cypher, merge_change_cypher
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
-PREFETCH_CYPHER = """
+PREFETCH_CYPHER = f"""
 UNWIND $rows AS row
 
 // Resolve the Agency first
-OPTIONAL MATCH (a_uid:Agency {uid: row.a_label})
-OPTIONAL MATCH (a_key:Agency {name: row.a_label, hq_state: row.a_hq_state})
+OPTIONAL MATCH (a_uid:Agency {{uid: row.a_label}})
+OPTIONAL MATCH (a_key:Agency {{name: row.a_label, hq_state: row.a_hq_state}})
 WITH row, coalesce (a_uid, a_key) AS a
 
 // Now match Unit via Agency
-OPTIONAL MATCH (u:Unit {name: row.name})-[:ESTABLISHED_BY]-(a)
+OPTIONAL MATCH (u:Unit {{name: row.name}})-[:ESTABLISHED_BY]-(a)
 
-MATCH (s:Source {uid: row.source_uid})
-OPTIONAL MATCH (u)-[c:UPDATED_BY]->(s)
-// WHERE c.user_uid IS NULL            // ignore user-created updates
-WITH row, a, u, max(c.timestamp) AS last_ts
-RETURN {
+MATCH (s:Source {{uid: row.source_uid}})
+{latest_change_timestamp_cypher("u", "s", change_alias="unit_change", carry_aliases=("row", "a", "u", "s"))}
+WITH row, a, u, last_ts
+RETURN {{
   row_id: row.row_id,
   agency_uid: a.uid,
   exists: u IS NOT NULL,
   existing: CASE WHEN u IS NULL THEN NULL ELSE properties(u) END,
   last_ts: last_ts
-} as record
+}} as record
 """
 
-UPSERT_CYPHER = """
+UPSERT_CYPHER = f"""
 UNWIND $rows AS row
-MATCH (s:Source {uid: row.source_uid})
-MATCH (a:Agency {uid: row.agency_uid})
-MERGE (a)<-[:ESTABLISHED_BY]-(u:Unit {name: row.name})
+MATCH (s:Source {{uid: row.source_uid}})
+MATCH (a:Agency {{uid: row.agency_uid}})
+MERGE (a)<-[:ESTABLISHED_BY]-(u:Unit {{name: row.name}})
 ON CREATE SET u.uid = replace(randomUUID(), "-", "")
 SET u += row.props
 
-MERGE (u)-[cit:UPDATED_BY {
-  timestamp: datetime(row.scraped_dt),
-  url: coalesce(row.url, \"\")
-}]->(s)
-SET
-  cit.user_uid = NULL,
-  cit.diff = row.diff
+{merge_change_cypher("u", "s", "unit_change")}
 
 // Location link
 WITH u, row
-OPTIONAL MATCH (st:StateNode {abbreviation: row.hq_state})
+OPTIONAL MATCH (st:StateNode {{abbreviation: row.hq_state}})
 
 WITH u, row, st
 WHERE st IS NOT NULL AND row.hq_city IS NOT NULL
 
-OPTIONAL MATCH (c:CityNode {name: row.hq_city})-[]-(:CountyNode)-[]-(st)
+OPTIONAL MATCH (c:CityNode {{name: row.hq_city}})-[]-(:CountyNode)-[]-(st)
 WITH u, row, c
 FOREACH (_ IN CASE WHEN c IS NULL THEN [] ELSE [1] END |
   MERGE (u)-[:LOCATED_IN]->(c)
@@ -204,7 +197,7 @@ async def upsert_unit_batch(
 
         to_apply.append({
             **base_apply,
-            "diff": json.loads(diff.to_json()),
+            "diff": diff.to_json(),
         })
 
     if not to_apply:

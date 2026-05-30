@@ -1,10 +1,14 @@
 from loader.domain.types.enums import PropertyEnum
+from loader.domain.source import HasCitations
 from neomodel import (
     AsyncStructuredNode,
     StringProperty,
+    AsyncRelationship,
     AsyncRelationshipTo,
+    AsyncRelationshipFrom,
     DateProperty,
-    UniqueIdProperty
+    UniqueIdProperty,
+    AsyncOne
 )
 
 
@@ -23,7 +27,7 @@ class CourtLevel(str, PropertyEnum):
     US_SUPREME_COURT = "U.S. Supreme"
 
 
-class Litigation(AsyncStructuredNode):
+class Litigation(AsyncStructuredNode, HasCitations):
     uid = UniqueIdProperty()
     case_title = StringProperty()
     docket_number = StringProperty()
@@ -39,8 +43,6 @@ class Litigation(AsyncStructuredNode):
     case_type = StringProperty(choices=LegalCaseType.choices())
 
     # Relationships
-    documents = AsyncRelationshipTo("Document", "RELATED_TO")
-    dispositions = AsyncRelationshipTo("Disposition", "YIELDED")
     defendants = AsyncRelationshipTo("Officer", "NAMED_IN")
 
     def __repr__(self):
@@ -53,8 +55,14 @@ class Document(AsyncStructuredNode):
     description = StringProperty()
     url = StringProperty()
 
+    # Relationships
+    litigation = AsyncRelationship("Litigation", "HAS_DOCUMENT", cardinality=AsyncOne)
+
 
 class Disposition(AsyncStructuredNode):
     description = StringProperty()
     date = DateProperty()
     disposition = StringProperty()
+
+    # Relationships
+    litigation = AsyncRelationshipFrom("Litigation", "DISPOSED_IN", cardinality=AsyncOne)

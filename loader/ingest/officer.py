@@ -5,6 +5,7 @@ import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
+from .change import latest_change_timestamp_cypher, merge_change_cypher
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -24,11 +25,10 @@ OPTIONAL MATCH (o:Officer)-[:HAS_STATE_ID]-(sid)
 MATCH (s:Source {uid: row.source_uid})
 
 // Officer freshness
-CALL (o, s) {
-  OPTIONAL MATCH (o)-[c:UPDATED_BY]->(s)
-  // WHERE c.user_uid IS NULL
-  RETURN max(c.timestamp) AS last_ts
-}
+""" + latest_change_timestamp_cypher(
+    "o", "s", change_alias="officer_change",
+    carry_aliases=("row", "sid", "o", "s"),
+) + """
 
 // Resolve incoming employments
 CALL (row, o, s) {
@@ -46,9 +46,13 @@ CALL (row, o, s) {
     AND (e)-[:IN_UNIT]-(u)
     AND e.highest_rank = emp.highest_rank
 
-  OPTIONAL MATCH (e)-[ec:UPDATED_BY]->(s)
+""" + latest_change_timestamp_cypher(
+    "e", "s", result_alias="emp_last_ts",
+    change_alias="employment_change",
+    carry_aliases=("i", "emp", "a", "u", "e", "s"),
+) + """
 
-  WITH i, emp, a, u, e, max(ec.timestamp) AS emp_last_ts
+  WITH i, emp, a, u, e, emp_last_ts
 
   RETURN collect({
     i: i,
@@ -89,13 +93,7 @@ MERGE (sid)<-[:HAS_STATE_ID]-(o:Officer)
 ON CREATE SET o.uid = replace(randomUUID(), "-", "")
 SET o += row.props
 
-MERGE (o)-[cit:UPDATED_BY {
-  timestamp: datetime(row.scraped_dt),
-  url: coalesce(row.url, \"\")
-}]->(s)
-SET
-  cit.user_uid = NULL,
-  cit.diff = row.diff
+""" + merge_change_cypher("o", "s", "officer_change") + """
 
 WITH s, o, row
 
@@ -109,13 +107,9 @@ CALL (s, o, row){
     ON CREATE SET e.uid = replace(randomUUID(), "-", "")
     SET e += emp.props
 
-    MERGE (e)-[cit:UPDATED_BY {
-      timestamp: datetime(row.scraped_dt),
-      url: coalesce(row.url, \"\")
-    }]->(s)
-    SET
-      cit.user_uid = NULL,
-      cit.diff = emp.diff
+""" + merge_change_cypher(
+    "e", "s", "employment_change", diff_expr="emp.diff"
+) + """
 
     RETURN count(*) AS employments_updated
 }
@@ -141,6 +135,7 @@ EMPLOYMENT_FIELDS = (
     "latest_date",
     "badge_number",
     "highest_rank",
+    "rank_label",
     "status",
     "change",
 )
@@ -152,6 +147,7 @@ COMMAND_ASSIGNMENT_FIELDS = (
     "latest_date",
     "badge_number",
     "highest_rank",
+    "rank_label",
     "change",
 )
 
@@ -307,12 +303,13 @@ async def upsert_officer_batch(
                 "highest_rank": rank,
                 "props": emp_props,
             }
-            if not emp.get("matched"):
+            if not fetched.get("matched"):
                 # New employment record
                 emps.append({
                     **emp_base,
                     "diff": None,
                 })
+                continue
             
             diff = detect_diff_dict(fetched.get("props") or {}, emp_props)
             if not diff:

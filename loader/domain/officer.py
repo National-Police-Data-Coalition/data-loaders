@@ -1,11 +1,10 @@
 from loader.domain.types.enums import PropertyEnum, State, Ethnicity, Gender
-from loader.domain.source import Citation
+from loader.domain.source import HasCitations
 
 from neomodel import (
-    AsyncStructuredNode,
-    AsyncRelationshipTo, AsyncRelationshipFrom, AsyncRelationship,
+    AsyncStructuredNode, AsyncRelationship,
     StringProperty, IntegerProperty,
-    UniqueIdProperty, One
+    UniqueIdProperty, AsyncOne
 )
 
 
@@ -24,13 +23,13 @@ class StateID(AsyncStructuredNode):
     id_name = StringProperty()  # e.g. "Tax ID Number"
     state = StringProperty(choices=State.choices())  # e.g. "NY"
     value = StringProperty()  # e.g. "958938"
-    officer = AsyncRelationship('Officer', "HAS_STATE_ID", cardinality=One)
+    officer = AsyncRelationship('Officer', "HAS_STATE_ID", cardinality=AsyncOne)
 
     def __repr__(self):
         return f"<StateID: {self.id_name}, {self.state}>"
 
 
-class Officer(AsyncStructuredNode):
+class Officer(AsyncStructuredNode, HasCitations):
     __property_order__ = [
         "uid", "first_name", "middle_name",
         "last_name", "suffix", "ethnicity",
@@ -46,9 +45,5 @@ class Officer(AsyncStructuredNode):
     gender = StringProperty(choices=Gender.choices())
     year_of_birth = IntegerProperty()
 
-    # Relationships
-    citations = AsyncRelationshipTo(
-        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
-
     def __repr__(self):
-        return f"<Officer {self.id}>"
+        return f"<Officer {self.uid}>"

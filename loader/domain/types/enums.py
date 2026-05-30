@@ -17,6 +17,7 @@ class Gender(str, PropertyEnum):
 
 
 class Ethnicity(str, PropertyEnum):
+    UNKNOWN = 'Unknown'
     WHITE = 'White'
     BLACK_AFRICAN_AMERICAN = 'Black/African American'
     AMERICAN_INDIAN_ALASKA_NATIVE = 'American Indian/Alaska Native'

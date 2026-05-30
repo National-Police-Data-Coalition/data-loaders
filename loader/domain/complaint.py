@@ -1,6 +1,7 @@
 """Define the Classes for Complaints."""
+from loader.domain.infra.locations import Located
 from loader.domain.types.enums import PropertyEnum
-from loader.domain.source import Citation
+from loader.domain.source import HasCitations
 from neomodel import (
     AsyncStructuredNode,
     AsyncStructuredRel,
@@ -10,7 +11,7 @@ from neomodel import (
     AsyncRelationshipFrom,
     DateProperty,
     UniqueIdProperty,
-    One
+    AsyncOne
 )
 
 
@@ -49,9 +50,9 @@ class ComplaintSourceRel(AsyncStructuredRel):
     reporting_agency_email = StringProperty()
 
 
-class Location(AsyncStructuredNode):
+class Location(AsyncStructuredNode, Located):
     location_type = StringProperty()
-    loocation_description = StringProperty()
+    location_description = StringProperty()
     address = StringProperty()
     city = StringProperty()
     state = StringProperty()
@@ -59,12 +60,8 @@ class Location(AsyncStructuredNode):
     administrative_area = StringProperty()
     administrative_area_type = StringProperty()
 
-    city_node = AsyncRelationshipTo(
-        "loader.domain.infra.locations.CityNode", 
-        "LOCATED_IN", cardinality=One)
 
-
-class Complaint(AsyncStructuredNode):
+class Complaint(AsyncStructuredNode, HasCitations):
     uid = UniqueIdProperty()
     record_id = StringProperty(index=True)
     complaint_key = StringProperty(unique_index=True)
@@ -77,12 +74,10 @@ class Complaint(AsyncStructuredNode):
 
     # Relationships
     source_org = AsyncRelationshipTo("loader.domain.source.Source", "HAS_SOURCE", model=ComplaintSourceRel)
-    location = AsyncRelationshipTo("Location", "OCCURRED_IN", cardinality=One)
-    civilian_witnesses = AsyncRelationshipTo("loader.domain.civilian.Civilian", "WITNESSED")
-    police_witnesses = AsyncRelationshipTo("loader.domain.officer.Officer", "WITNESSED")
+    location = AsyncRelationshipTo("Location", "OCCURRED_IN", cardinality=AsyncOne)
+    civilian_witnesses = AsyncRelationshipTo("loader.domain.civilian.Civilian", "WITNESSED_BY")
+    police_witnesses = AsyncRelationshipTo("loader.domain.officer.Officer", "WITNESSED_BY")
     attachments = AsyncRelationshipTo("loader.domain.attachment.Attachment", "ATTACHED_TO")
-    citations = AsyncRelationshipTo(
-        'loader.domain.source.Source', "UPDATED_BY", model=Citation)
     # civilian_review_board = AsyncRelationshipFrom("CivilianReviewBoard", "REVIEWED")
 
     def __repr__(self):
@@ -90,7 +85,7 @@ class Complaint(AsyncStructuredNode):
         return f"<Complaint {self.uid}>"
 
 
-class Allegation(AsyncStructuredNode):
+class Allegation(AsyncStructuredNode, HasCitations):
     uid = UniqueIdProperty()
     record_id = StringProperty(index=True)
     allegation_key = StringProperty(unique_index=True)

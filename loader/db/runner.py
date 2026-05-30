@@ -69,6 +69,7 @@ async def load_model_group(
                 await q.put(None)
 
     async def worker(worker_id: int) -> None:
+        nonlocal err
         log = CtxAdapter(
             logging.getLogger(__name__),
             {"model": model, "worker": worker_id}
@@ -80,6 +81,8 @@ async def load_model_group(
                 try:
                     if batch is None:
                         return
+                    if stop_on_error and stop_event.is_set():
+                        continue
                     
                     batch_seq += 1
                     log.info(
@@ -90,7 +93,11 @@ async def load_model_group(
                     log.info(
                         "done batch=%d size=%d", batch_seq, len(batch)
                     )
-                except Exception:
+                except Exception as e:
+                    if err is None:
+                        err = e
+                    if stop_on_error:
+                        stop_event.set()
                     logging.exception(
                         "[%s w=%d b=%d] error processing batch",
                         model, worker_id, batch_seq
