@@ -20,7 +20,8 @@ OPTIONAL MATCH (c)-[:OCCURRED_IN]->(l:Location)
 
 // Complaint freshness
 """ + latest_change_timestamp_cypher(
-    "c", "s", change_alias="complaint_change"
+    "c", "s", change_alias="complaint_change",
+    carry_aliases=("row", "c", "l"),
 ) + """
 
 RETURN {

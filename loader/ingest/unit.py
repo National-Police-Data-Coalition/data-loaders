@@ -20,7 +20,7 @@ WITH row, coalesce (a_uid, a_key) AS a
 OPTIONAL MATCH (u:Unit {{name: row.name}})-[:ESTABLISHED_BY]-(a)
 
 MATCH (s:Source {{uid: row.source_uid}})
-{latest_change_timestamp_cypher("u", "s", change_alias="unit_change")}
+{latest_change_timestamp_cypher("u", "s", change_alias="unit_change", carry_aliases=("row", "a", "u", "s"))}
 WITH row, a, u, last_ts
 RETURN {{
   row_id: row.row_id,

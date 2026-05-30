@@ -26,7 +26,8 @@ MATCH (s:Source {uid: row.source_uid})
 
 // Officer freshness
 """ + latest_change_timestamp_cypher(
-    "o", "s", change_alias="officer_change"
+    "o", "s", change_alias="officer_change",
+    carry_aliases=("row", "sid", "o", "s"),
 ) + """
 
 // Resolve incoming employments
@@ -47,7 +48,8 @@ CALL (row, o, s) {
 
 """ + latest_change_timestamp_cypher(
     "e", "s", result_alias="emp_last_ts",
-    change_alias="employment_change"
+    change_alias="employment_change",
+    carry_aliases=("i", "emp", "a", "u", "e", "s"),
 ) + """
 
   WITH i, emp, a, u, e, emp_last_ts

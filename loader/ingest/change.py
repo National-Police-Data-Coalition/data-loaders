@@ -3,12 +3,15 @@ def latest_change_timestamp_cypher(
     source_alias: str,
     result_alias: str = "last_ts",
     change_alias: str = "change",
+    carry_aliases: tuple[str, ...] | None = None,
 ) -> str:
+    if carry_aliases is None:
+        carry_aliases = tuple(dict.fromkeys(("row", node_alias, source_alias)))
+    carry = ", ".join(carry_aliases)
     return f"""
-CALL ({node_alias}, {source_alias}) {{
-  OPTIONAL MATCH ({node_alias})<-[:CHANGE_TO]-({change_alias}:Change)-[:ATTRIBUTED_TO]->({source_alias})
-  RETURN max({change_alias}.timestamp) AS {result_alias}
-}}
+OPTIONAL MATCH ({node_alias})<-[:CHANGE_TO]-({change_alias}:Change)-[:ATTRIBUTED_TO]->({source_alias})
+WHERE {node_alias} IS NOT NULL
+WITH {carry}, max({change_alias}.timestamp) AS {result_alias}
 """
 
 
