@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+from loader.utils.change_uid import det_change_uid, deterministic_node_uid
+
+
 def latest_change_timestamp_cypher(
     node_alias: str,
     source_alias: str,
@@ -21,15 +26,13 @@ def merge_change_cypher(
     change_alias: str,
     row_alias: str = "row",
     diff_expr: str = "row.diff",
+    change_uid_expr: str | None = None,
 ) -> str:
+    if change_uid_expr is None:
+        change_uid_expr = f"{row_alias}.change_uid"
     return f"""
-WITH *,
-  elementId({node_alias}) + ":" +
-  {row_alias}.source_uid + ":" +
-  toString(datetime({row_alias}.scraped_dt)) + ":" +
-  coalesce({row_alias}.url, "") AS {change_alias}_uid
-MERGE ({change_alias}:Change {{uid: {change_alias}_uid}})
-SET
+ MERGE ({change_alias}:Change {{uid: {change_uid_expr}}})
+ SET
   {change_alias}.timestamp = datetime({row_alias}.scraped_dt),
   {change_alias}.url = coalesce({row_alias}.url, ""),
   {change_alias}.diff = {diff_expr}

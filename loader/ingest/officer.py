@@ -5,7 +5,12 @@ import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
-from .change import latest_change_timestamp_cypher, merge_change_cypher
+from .change import (
+    latest_change_timestamp_cypher,
+    merge_change_cypher,
+    det_change_uid,
+    deterministic_node_uid,
+)
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -90,8 +95,10 @@ MERGE (sid:StateID {
   value: row.sid_id_value
 })
 MERGE (sid)<-[:HAS_STATE_ID]-(o:Officer)
-ON CREATE SET o.uid = replace(randomUUID(), "-", "")
-SET o += row.props
+ON CREATE SET o.uid = row.uid
+SET
+  o.uid = coalesce(o.uid, row.uid),
+  o += row.props
 
 """ + merge_change_cypher("o", "s", "officer_change") + """
 
@@ -104,8 +111,10 @@ CALL (s, o, row){
     MATCH (u:Unit {uid: emp.unit_uid})
 
     MERGE (o)<-[:HELD_BY]-(e:Employment {highest_rank: emp.highest_rank})-[:IN_UNIT]->(u)
-    ON CREATE SET e.uid = replace(randomUUID(), "-", "")
-    SET e += emp.props
+    ON CREATE SET e.uid = emp.uid
+    SET
+      e.uid = coalesce(e.uid, emp.uid),
+      e += emp.props
 
 """ + merge_change_cypher(
     "e", "s", "employment_change", diff_expr="emp.diff"
@@ -274,6 +283,9 @@ async def upsert_officer_batch(
 
         props = build_props_map(incoming_data, OFFICER_FIELDS)
         emps = []
+        uid = (existing_map or {}).get("uid") or deterministic_node_uid(
+            "officer", r["sid_state"], r["sid_id_name"], r["sid_id_value"]
+        )
 
         # if len(incoming_emps) != len(employments):
         #     logging.warning("Employment count mismatch during officer upsert diffing.")
@@ -298,10 +310,20 @@ async def upsert_officer_batch(
             if not (rank and emp_props):
                 dropped_e_bad += 1
                 continue
+            emp_uid = fetched.get("employment_uid") or deterministic_node_uid(
+                "employment", uid, unit_uid, rank
+            )
             emp_base = {
+                "uid": emp_uid,
                 "unit_uid": unit_uid,
                 "highest_rank": rank,
                 "props": emp_props,
+                "source_uid": r["source_uid"],
+                "url": r["url"],
+                "scraped_dt": r["scraped_dt"],
+                "change_uid": det_change_uid(
+                    emp_uid, r["source_uid"], r["scraped_dt"], r["url"]
+                ),
             }
             if not fetched.get("matched"):
                 # New employment record
@@ -323,6 +345,10 @@ async def upsert_officer_batch(
 
         base_apply = {
             **r,
+            "uid": uid,
+            "change_uid": det_change_uid(
+                uid, r["source_uid"], r["scraped_dt"], r["url"]
+            ),
             "props": props,
             "sid": sid_uid,
             "employments": emps,

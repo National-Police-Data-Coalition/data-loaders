@@ -5,7 +5,12 @@ import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
-from .change import latest_change_timestamp_cypher, merge_change_cypher
+from .change import (
+    latest_change_timestamp_cypher,
+    merge_change_cypher,
+    det_change_uid,
+    deterministic_node_uid,
+)
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -39,8 +44,9 @@ UNWIND $rows AS row
 MATCH (s:Source {uid: row.source_uid})
 // Merge Complaint node
 MERGE (s)<-[rel:HAS_SOURCE]-(c:Complaint {record_id: row.record_id})
-ON CREATE SET c.uid = replace(randomUUID(), "-", "")
+ON CREATE SET c.uid = row.uid
 SET 
+  c.uid = coalesce(c.uid, row.uid),
   c += row.props,
   rel += row.source_rel_props
 
@@ -51,10 +57,16 @@ SET
 WITH s, c, row
 CALL (s, c, row) {
   MERGE (c)-[:OCCURRED_IN]->(l:Location)
-  SET l += row.loc_props
+  SET
+    l.uid = coalesce(l.uid, row.loc_uid),
+    l += row.loc_props
 
-""" + merge_change_cypher(
-    "l", "s", "location_change", diff_expr="row.loc_diff"
+ """ + merge_change_cypher(
+    "l",
+    "s",
+    "location_change",
+    diff_expr="row.loc_diff",
+    change_uid_expr="row.loc_change_uid",
 ) + """
 
   WITH l
@@ -226,11 +238,24 @@ async def upsert_complaint_batch(
         loc_props = build_props_map(incoming_data.get("location", {}), LOCATION_FIELDS)
         source_rel_props = build_props_map(incoming_data.get("source_details", {}), SOURCE_DETAILS_FIELDS)
 
+        uid = uid or deterministic_node_uid(
+            "complaint", r["source_uid"], r["record_id"]
+        )
+        loc_uid = (existing_loc_map or {}).get("uid") or deterministic_node_uid(
+            "location", uid
+        )
         base_apply = {
             **r,
             "props": props,
             "uid": uid,
+            "change_uid": det_change_uid(
+                uid, r["source_uid"], r["scraped_dt"], r["url"]
+            ),
+            "loc_uid": loc_uid,
             "loc_props": loc_props,
+            "loc_change_uid": det_change_uid(
+                loc_uid, r["source_uid"], r["scraped_dt"], r["url"]
+            ),
             "source_rel_props": source_rel_props,
         }
 

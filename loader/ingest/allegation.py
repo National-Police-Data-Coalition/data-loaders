@@ -5,7 +5,12 @@ import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
-from .change import latest_change_timestamp_cypher, merge_change_cypher
+from .change import (
+    latest_change_timestamp_cypher,
+    merge_change_cypher,
+    det_change_uid,
+    deterministic_node_uid,
+)
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -51,8 +56,9 @@ MATCH (complaint:Complaint { uid: row.complaint_uid })
 
 // Merge Allegation node
 MERGE (complaint)<-[:ALLEGED]-(a:Allegation { record_id: row.record_id })
-ON CREATE SET a.uid = replace(randomUUID(), "-", "")
+ON CREATE SET a.uid = row.uid
 SET 
+  a.uid = coalesce(a.uid, row.uid),
   a += row.props
 
 """ + merge_change_cypher("a", "s", "allegation_change") + """
@@ -68,11 +74,16 @@ FOREACH (_ IN CASE WHEN o IS NULL THEN [] ELSE [1] END |
 WITH a, row, s
 MERGE (a)-[:REPORTED_BY]->(civ:Civilian)
 SET
+  civ.uid = coalesce(civ.uid, row.civ_uid),
   civ += row.civ_props
 
 WITH civ, row, s
 """ + merge_change_cypher(
-    "civ", "s", "civilian_change", diff_expr="row.civ_diff"
+    "civ",
+    "s",
+    "civilian_change",
+    diff_expr="row.civ_diff",
+    change_uid_expr="row.civ_change_uid",
 ) + """
 
 RETURN count(*) AS applied
@@ -221,12 +232,26 @@ async def upsert_allegation_batch(
         props = build_props_map(incoming_data, ALLEGATION_FIELDS)
         civ_props = build_props_map(incoming_civ, CIVILIAN_FIELDS)
 
+        uid = (existing_map or {}).get("uid") or deterministic_node_uid(
+            "allegation", complaint_uid, r["record_id"]
+        )
+        civ_uid = (complainant_map or {}).get("uid") or deterministic_node_uid(
+            "civilian", uid, "reported_by"
+        )
         base_apply = {
             **r,
+            "uid": uid,
+            "change_uid": det_change_uid(
+                uid, r["source_uid"], r["scraped_dt"], r["url"]
+            ),
             "complaint_uid": complaint_uid,
             "officer_uid": officer_uid,
             "props": props,
+            "civ_uid": civ_uid,
             "civ_props": civ_props,
+            "civ_change_uid": det_change_uid(
+                civ_uid, r["source_uid"], r["scraped_dt"], r["url"]
+            ),
         }
 
         if not exists:

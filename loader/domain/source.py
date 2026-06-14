@@ -1,5 +1,6 @@
 from __future__ import annotations  # allows type hinting of class itself
 from loader.domain.types.enums import PropertyEnum
+from loader.utils.change_uid import det_change_uid
 from datetime import datetime
 from neomodel import (
     AsyncStructuredNode, AsyncStructuredRel,
@@ -107,7 +108,7 @@ class SourceMember(AsyncStructuredRel):
 
 
 class Change(AsyncStructuredNode):
-    uid = UniqueIdProperty()
+    uid = StringProperty(unique_index=True, required=True)
     timestamp = DateTimeProperty(
         default_now=True,
         index=True
@@ -160,9 +161,17 @@ class HasCitations:
         user: "loader.domain.user.User" | None = None,
         diff: str | None = None,
         url: str | None = None,
+        timestamp: datetime | None = None,
     ) -> Change:
+        timestamp = timestamp or datetime.now()
+        target_uid = getattr(self, "uid", None)
+        source_uid = getattr(source, "uid", None)
+        if not target_uid or not source_uid:
+            raise ValueError("Change creation requires target and source uid values")
+
         change = await Change(
-            timestamp=datetime.now(),
+            uid=det_change_uid(target_uid, source_uid, timestamp, url),
+            timestamp=timestamp,
             diff=diff,
             url=url,
         ).save()
