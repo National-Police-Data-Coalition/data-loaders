@@ -3,13 +3,12 @@ from loader.domain.types.enums import Ethnicity, Gender
 from neomodel import (
     AsyncStructuredNode,
     StringProperty,
-    IntegerProperty,
-    UniqueIdProperty,
+    IntegerProperty
 )
 
 
 class Civilian(AsyncStructuredNode):
-    uid = UniqueIdProperty()
+    uid = StringProperty(unique_index=True)
     civ_id = StringProperty()
     age = IntegerProperty()
     age_range = StringProperty()

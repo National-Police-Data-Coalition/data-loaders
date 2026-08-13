@@ -1,14 +1,18 @@
 from __future__ import annotations  # allows type hinting of class itself
 from loader.domain.types.enums import PropertyEnum
-from loader.utils.change_uid import det_change_uid
-from datetime import datetime
+from loader.utils.change_uid import (
+    canonical_change_timestamp,
+    canonical_change_url,
+    det_change_uid,
+)
+from datetime import datetime, timezone
 from neomodel import (
     AsyncStructuredNode, AsyncStructuredRel,
     AsyncRelationship, AsyncRelationshipTo, AsyncRelationshipFrom,
     StringProperty, DateTimeProperty,
     UniqueIdProperty, BooleanProperty,
     EmailProperty,
-    AsyncZeroOrOne, AsyncOne
+    AsyncZeroOrOne, AsyncOne, adb
 )
 
 from loader.domain.contact import EmailContact, SocialMediaContact
@@ -163,18 +167,34 @@ class HasCitations:
         url: str | None = None,
         timestamp: datetime | None = None,
     ) -> Change:
-        timestamp = timestamp or datetime.now()
+        timestamp = timestamp or datetime.now(timezone.utc)
         target_uid = getattr(self, "uid", None)
         source_uid = getattr(source, "uid", None)
         if not target_uid or not source_uid:
             raise ValueError("Change creation requires target and source uid values")
 
-        change = await Change(
-            uid=det_change_uid(target_uid, source_uid, timestamp, url),
-            timestamp=timestamp,
-            diff=diff,
-            url=url,
-        ).save()
+        change_uid = det_change_uid(target_uid, source_uid, timestamp, url)
+        timestamp_value = canonical_change_timestamp(timestamp)
+        url_value = canonical_change_url(url)
+        cypher = """
+        MERGE (change:Change {uid: $uid})
+        SET
+            change.timestamp = datetime($timestamp),
+            change.url = $url,
+            change.diff = $diff
+        RETURN change
+        """
+        result, _ = await adb.cypher_query(
+            cypher,
+            {
+                "uid": change_uid,
+                "timestamp": timestamp_value,
+                "url": url_value,
+                "diff": diff,
+            },
+            resolve_objects=True,
+        )
+        change = result[0][0]
 
         await change.source.connect(source)
         if user is not None:
