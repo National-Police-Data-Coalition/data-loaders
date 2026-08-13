@@ -51,6 +51,7 @@ class ComplaintSourceRel(AsyncStructuredRel):
 
 
 class Location(AsyncStructuredNode, Located):
+    uid = StringProperty(unique_index=True)
     location_type = StringProperty()
     location_description = StringProperty()
     address = StringProperty()

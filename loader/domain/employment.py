@@ -12,8 +12,11 @@ from neomodel import (
 )
 
 class EmploymentType(str, PropertyEnum):
+    NON_SWORN = "Non-Sworn"
     LAW_ENFORCEMENT = "Law Enforcement"
     CORRECTIONS = "Corrections"
+    SPECIAL_FUNCTION = "Special Function"
+    RESERVE = "Reserve"
 
 class EmploymentStatus(PropertyEnum):
     FULL_TIME = "Full-Time"
@@ -28,9 +31,12 @@ class EmploymentChange(PropertyEnum):
     TRANSFER = "Transfer"
     TERMINATION = "Termination"
     RESIGNATION = "Resignation"
+    SEPARATION = "Separation"
+    SUSPENSION = "Suspension"
 
 
 class Rank(str, PropertyEnum):
+    NON_SWORN = "Non-Sworn"
     POLICE_OFFICER = "Police Officer"
     DETECTIVE = "Detective"
     SERGEANT = "Sergeant"
@@ -40,9 +46,12 @@ class Rank(str, PropertyEnum):
     COLONEL = "Colonel"
     COMMANDER = "Commander"
     CHIEF = "Chief"
+    HIDDEN = "Hidden"
 
     def get_value(self):
-        if self == Rank.POLICE_OFFICER:
+        if self == Rank.NON_SWORN:
+            return 5
+        elif self == Rank.POLICE_OFFICER:
             return 10
         elif self == Rank.DETECTIVE:
             return 20
@@ -60,6 +69,8 @@ class Rank(str, PropertyEnum):
             return 80
         elif self == Rank.CHIEF:
             return 90
+        elif self == Rank.HIDDEN:
+            return 77
         return 0
 
 

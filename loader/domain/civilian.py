@@ -8,6 +8,7 @@ from neomodel import (
 
 
 class Civilian(AsyncStructuredNode):
+    uid = StringProperty(unique_index=True)
     civ_id = StringProperty()
     age = IntegerProperty()
     age_range = StringProperty()

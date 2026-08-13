@@ -4,7 +4,12 @@ import logging
 from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
-from .change import latest_change_timestamp_cypher, merge_change_cypher
+from .change import (
+    latest_change_timestamp_cypher,
+    merge_change_cypher,
+    det_change_uid,
+    deterministic_node_uid,
+)
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -36,8 +41,10 @@ UNWIND $rows AS row
 MATCH (s:Source {{uid: row.source_uid}})
 MATCH (a:Agency {{uid: row.agency_uid}})
 MERGE (a)<-[:ESTABLISHED_BY]-(u:Unit {{name: row.name}})
-ON CREATE SET u.uid = replace(randomUUID(), "-", "")
-SET u += row.props
+ON CREATE SET u.uid = row.uid
+SET
+  u.uid = coalesce(u.uid, row.uid),
+  u += row.props
 
 {merge_change_cypher("u", "s", "unit_change")}
 
@@ -174,12 +181,19 @@ async def upsert_unit_batch(
         hq_state = incoming_data.get("hq_state")
         hq_city = incoming_data.get("hq_city")
 
+        uid = (existing_map or {}).get("uid") or deterministic_node_uid(
+            "unit", agency_uid, r["name"]
+        )
         base_apply = {
             **r,
+            "uid": uid,
             "props": props,
             "hq_state": hq_state,
             "hq_city": hq_city,
             "agency_uid": agency_uid,
+            "change_uid": det_change_uid(
+                uid, r["source_uid"], r["scraped_dt"], r["url"]
+            ),
         }
 
         if not exists:
