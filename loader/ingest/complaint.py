@@ -6,6 +6,7 @@ from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
 from .change import latest_change_timestamp_cypher, merge_change_cypher
+from .complaint_key import build_complaint_key
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -168,10 +169,12 @@ async def upsert_complaint_batch(
         if not (source_uid and url and scraped_at):
             dropped_bad += 1
             continue
+        complaint_key = build_complaint_key(source_uid, record_id)
         scraped_dt = parse_scraped_at(scraped_at)
         row = {
             "row_id": i,
             "record_id": record_id,
+            "complaint_key": complaint_key,
             "source_uid": source_uid,
             "url": url,
             "scraped_dt": scraped_dt,
@@ -223,6 +226,7 @@ async def upsert_complaint_batch(
             continue
 
         props = build_props_map(incoming_data, COMPLAINT_FIELDS)
+        props["complaint_key"] = r["complaint_key"]
         loc_props = build_props_map(incoming_data.get("location", {}), LOCATION_FIELDS)
         source_rel_props = build_props_map(incoming_data.get("source_details", {}), SOURCE_DETAILS_FIELDS)
 

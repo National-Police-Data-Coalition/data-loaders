@@ -67,6 +67,25 @@ python -m loader.cli load datasets/input.jsonl -l DEBUG
 - Logs are written to the console and include detailed information about processed data, errors, and updates.
 - Missing references or failed connections are saved to a timestamped file named `<timestamp>_missing_log.txt`.
 
+## Deterministic Keys
+
+Some ingest handlers need a stable key so related records from separate JSONL rows can resolve the same graph node. These keys should be deterministic, based on canonical source identifiers, and generated through a shared helper rather than rebuilt inline in each handler.
+
+Complaint keys are generated with SHA-256 in `loader.ingest.complaint_key.build_complaint_key`:
+
+```text
+sha256("complaint\x1f<source_uid>\x1f<record_id>")
+```
+
+The `\x1f` unit separator keeps the key input unambiguous even when identifiers contain ordinary punctuation. The stored value is the full lowercase SHA-256 hex digest. Complaint ingestion writes this digest to `Complaint.complaint_key`, and allegation ingestion uses the same helper to resolve the complaint from `source_uid` and `complaint_id`.
+
+When adding deterministic keys for other entity types, prefer the same pattern:
+
+- Include an entity namespace as the first part, such as `complaint`, `officer`, or `unit`.
+- Join canonical parts with `\x1f`.
+- Store the full SHA-256 hex digest unless there is a documented reason to use a different format.
+- Centralize the implementation in a helper so creators and resolvers use identical logic.
+
 ## Functions
 
 ### Key Functions
