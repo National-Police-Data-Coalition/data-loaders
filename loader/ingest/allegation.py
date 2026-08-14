@@ -6,6 +6,7 @@ from typing import Any
 from neo4j import AsyncManagedTransaction
 from .base import register
 from .change import latest_change_timestamp_cypher, merge_change_cypher
+from .complaint_key import build_complaint_key
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
 
 
@@ -147,7 +148,7 @@ async def upsert_allegation_batch(
             continue
 
         # Resolve complaint_key for prefetch
-        complaint_key = source_uid + ":" + complaint_id
+        complaint_key = build_complaint_key(source_uid, complaint_id)
 
         officer_id_name = officer_sid.get("id_name")
         officer_id_value = officer_sid.get("value")
