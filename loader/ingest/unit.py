@@ -6,6 +6,7 @@ from neo4j import AsyncManagedTransaction
 from .base import register
 from .change import latest_change_timestamp_cypher, merge_change_cypher
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
+from loader.utils.deterministic_uid import det_change_uid, deterministic_node_uid
 
 
 PREFETCH_CYPHER = f"""
@@ -25,6 +26,7 @@ WITH row, a, u, last_ts
 RETURN {{
   row_id: row.row_id,
   agency_uid: a.uid,
+  unit_uid: CASE WHEN u IS NULL THEN NULL ELSE u.uid END,
   exists: u IS NOT NULL,
   existing: CASE WHEN u IS NULL THEN NULL ELSE properties(u) END,
   last_ts: last_ts
@@ -36,8 +38,10 @@ UNWIND $rows AS row
 MATCH (s:Source {{uid: row.source_uid}})
 MATCH (a:Agency {{uid: row.agency_uid}})
 MERGE (a)<-[:ESTABLISHED_BY]-(u:Unit {{name: row.name}})
-ON CREATE SET u.uid = replace(randomUUID(), "-", "")
-SET u += row.props
+ON CREATE SET u.uid = row.uid
+SET
+  u.uid = coalesce(u.uid, row.uid),
+  u += row.props
 
 {merge_change_cypher("u", "s", "unit_change")}
 
@@ -145,6 +149,7 @@ async def upsert_unit_batch(
         row_id = int(record["row_id"])
         prefetch[row_id] = (
             record["agency_uid"],
+            record.get("unit_uid"),
             bool(record["exists"]),
             record["existing"],
             record["last_ts"]
@@ -158,8 +163,8 @@ async def upsert_unit_batch(
         row_id = int(r["row_id"])
         incoming_data = incoming_by_id[row_id]
 
-        agency_uid, exists, existing_map, last_ts = prefetch.get(
-            row_id, (None, False, None, None))
+        agency_uid, unit_uid, exists, existing_map, last_ts = prefetch.get(
+            row_id, (None, None, False, None, None))
         
         # Skip if we couldn't resolve agency
         if agency_uid is None:
@@ -173,9 +178,12 @@ async def upsert_unit_batch(
         props = build_props_map(incoming_data)
         hq_state = incoming_data.get("hq_state")
         hq_city = incoming_data.get("hq_city")
+        target_uid = unit_uid or deterministic_node_uid("unit", agency_uid, r["name"])
 
         base_apply = {
             **r,
+            "uid": target_uid,
+            "change_uid": det_change_uid(target_uid, r["source_uid"], r["scraped_dt"], r["url"]),
             "props": props,
             "hq_state": hq_state,
             "hq_city": hq_city,
