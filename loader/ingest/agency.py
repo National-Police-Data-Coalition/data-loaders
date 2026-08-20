@@ -6,6 +6,7 @@ from neo4j import AsyncManagedTransaction
 from .base import register
 from .change import latest_change_timestamp_cypher, merge_change_cypher
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
+from loader.utils.deterministic_uid import det_change_uid, deterministic_node_uid
 
 
 
@@ -17,6 +18,7 @@ MATCH (s:Source {{uid: row.source_uid}})
 WITH row, a, last_ts
 RETURN
   row.row_id AS row_id,
+  CASE WHEN a IS NULL THEN NULL ELSE a.uid END AS uid,
   a IS NOT NULL AS exists,
   CASE WHEN a IS NULL THEN NULL ELSE properties(a) END AS existing,
   last_ts AS last_ts
@@ -28,9 +30,12 @@ MATCH (s:Source {{uid: row.source_uid}})
 MERGE (a:Agency {{name: row.name, hq_state: row.hq_state}})
   <-[:ESTABLISHED_BY]-(u:Unit {{name: "Unknown", hq_state: row.hq_state}})
 ON CREATE SET
-  a.uid = replace(randomUUID(), "-", ""),
-  u.uid = replace(randomUUID(), "-", "")
-SET a += row.props
+  a.uid = row.uid,
+  u.uid = row.unknown_unit_uid
+SET
+  a.uid = coalesce(a.uid, row.uid),
+  u.uid = coalesce(u.uid, row.unknown_unit_uid),
+  a += row.props
 
 {merge_change_cypher("a", "s", "agency_change")}
 
@@ -125,9 +130,14 @@ async def upsert_agency_batch(
 
     # --- 1) Prefetch existing + last citation date for (agency, source, url)
     results = await tx.run(PREFETCH_CYPHER, rows=input_rows)
-    prefetch: dict[int, tuple[bool, dict[str, Any] | None, Any]] = {}
-    async for row_id, exists, existing, last_ts in results:
-        prefetch[int(row_id)] = (bool(exists), existing, last_ts)
+    prefetch: dict[int, tuple[str | None, bool, dict[str, Any] | None, Any]] = {}
+    async for rec in results:
+        if len(rec) == 5:
+            row_id, uid, exists, existing, last_ts = rec
+        else:
+            row_id, exists, existing, last_ts = rec
+            uid = None
+        prefetch[int(row_id)] = (uid, bool(exists), existing, last_ts)
 
     # --- 2) Decide what to apply, and compute diffs only for fresh rows
     to_apply: list[dict[str, Any]] = []
@@ -136,7 +146,7 @@ async def upsert_agency_batch(
         row_id = int(r["row_id"])
         incoming_data = incoming_by_id[row_id]
 
-        exists, existing_map, last_ts = prefetch.get(row_id, (False, None, None))
+        uid, exists, existing_map, last_ts = prefetch.get(row_id, (None, False, None, None))
 
         # Freshness gate: skip if we already have a citation from
         # this source+url at or after this scraped time.
@@ -146,9 +156,13 @@ async def upsert_agency_batch(
         props = build_props_map(incoming_data)
         hq_state = incoming_data.get("hq_state")
         hq_city = incoming_data.get("hq_city")
+        target_uid = uid or deterministic_node_uid("agency", r["name"], hq_state)
 
         base_apply = {
             **r,
+            "uid": target_uid,
+            "unknown_unit_uid": deterministic_node_uid("unit", target_uid, "Unknown", hq_state),
+            "change_uid": det_change_uid(target_uid, r["source_uid"], r["scraped_dt"], r["url"]),
             "props": props,
             "hq_state": hq_state,
             "hq_city": hq_city,

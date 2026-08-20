@@ -8,6 +8,7 @@ from .base import register
 from .change import latest_change_timestamp_cypher, merge_change_cypher
 from .complaint_key import build_complaint_key
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
+from loader.utils.deterministic_uid import det_change_uid, deterministic_node_uid
 
 
 PREFETCH_CYPHER = """
@@ -38,6 +39,7 @@ RETURN {
   row_id: row.row_id,
   complaint: CASE WHEN complaint IS NULL THEN NULL ELSE complaint.uid END,
   officer: CASE WHEN officer IS NULL THEN NULL ELSE officer.uid END,
+  allegation: CASE WHEN a IS NULL THEN NULL ELSE a.uid END,
   exists: a IS NOT NULL,
   existing: CASE WHEN a IS NULL THEN NULL ELSE properties(a) END,
   complainant: CASE WHEN civ IS NULL THEN NULL ELSE properties(civ) END,
@@ -52,8 +54,9 @@ MATCH (complaint:Complaint { uid: row.complaint_uid })
 
 // Merge Allegation node
 MERGE (complaint)<-[:ALLEGED]-(a:Allegation { record_id: row.record_id })
-ON CREATE SET a.uid = replace(randomUUID(), "-", "")
+ON CREATE SET a.uid = row.uid
 SET 
+  a.uid = coalesce(a.uid, row.uid),
   a += row.props
 
 """ + merge_change_cypher("a", "s", "allegation_change") + """
@@ -69,11 +72,12 @@ FOREACH (_ IN CASE WHEN o IS NULL THEN [] ELSE [1] END |
 WITH a, row, s
 MERGE (a)-[:REPORTED_BY]->(civ:Civilian)
 SET
+  civ.uid = coalesce(civ.uid, row.civ_uid),
   civ += row.civ_props
 
 WITH civ, row, s
 """ + merge_change_cypher(
-    "civ", "s", "civilian_change", diff_expr="row.civ_diff"
+    "civ", "s", "civilian_change", diff_expr="row.civ_diff", change_uid_expr="row.civ_change_uid"
 ) + """
 
 RETURN count(*) AS applied
@@ -186,6 +190,7 @@ async def upsert_allegation_batch(
         prefetch[row_id] = (
             record["complaint"],
             record["officer"],
+            record.get("allegation"),
             bool(record["exists"]),
             record["existing"],
             record["complainant"],
@@ -206,8 +211,8 @@ async def upsert_allegation_batch(
         incoming_data = incoming_by_id[row_id]
         incoming_civ = civilian_by_id[row_id]
 
-        complaint_uid, officer_uid, exists, existing_map, complainant_map, last_ts = prefetch.get(
-            row_id, (None, None, False, None, None, None))
+        complaint_uid, officer_uid, allegation_uid, exists, existing_map, complainant_map, last_ts = prefetch.get(
+            row_id, (None, None, None, False, None, None, None))
         
         if complaint_uid is None:
             dropped_bad += 1
@@ -221,11 +226,17 @@ async def upsert_allegation_batch(
 
         props = build_props_map(incoming_data, ALLEGATION_FIELDS)
         civ_props = build_props_map(incoming_civ, CIVILIAN_FIELDS)
+        target_uid = allegation_uid or deterministic_node_uid("allegation", complaint_uid, r["record_id"])
+        civ_uid = deterministic_node_uid("civilian", target_uid, "reported_by")
 
         base_apply = {
             **r,
+            "uid": target_uid,
             "complaint_uid": complaint_uid,
             "officer_uid": officer_uid,
+            "change_uid": det_change_uid(target_uid, r["source_uid"], r["scraped_dt"], r["url"]),
+            "civ_uid": civ_uid,
+            "civ_change_uid": det_change_uid(civ_uid, r["source_uid"], r["scraped_dt"], r["url"]),
             "props": props,
             "civ_props": civ_props,
         }

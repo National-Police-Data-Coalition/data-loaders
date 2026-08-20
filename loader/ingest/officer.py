@@ -7,6 +7,7 @@ from neo4j import AsyncManagedTransaction
 from .base import register
 from .change import latest_change_timestamp_cypher, merge_change_cypher
 from loader.utils.citations import detect_diff_dict, parse_scraped_at
+from loader.utils.deterministic_uid import det_change_uid, deterministic_node_uid
 
 
 PREFETCH_CYPHER = """
@@ -73,6 +74,7 @@ CALL (row, o, s) {
 RETURN {
   row_id: row.row_id,
   sid: CASE WHEN sid IS NULL THEN NULL ELSE sid.uid END,
+  officer: CASE WHEN o IS NULL THEN NULL ELSE o.uid END,
   exists: o IS NOT NULL,
   existing: CASE WHEN o IS NULL THEN NULL ELSE properties(o) END,
   last_ts: last_ts,
@@ -90,8 +92,10 @@ MERGE (sid:StateID {
   value: row.sid_id_value
 })
 MERGE (sid)<-[:HAS_STATE_ID]-(o:Officer)
-ON CREATE SET o.uid = replace(randomUUID(), "-", "")
-SET o += row.props
+ON CREATE SET o.uid = row.uid
+SET
+  o.uid = coalesce(o.uid, row.uid),
+  o += row.props
 
 """ + merge_change_cypher("o", "s", "officer_change") + """
 
@@ -104,8 +108,10 @@ CALL (s, o, row){
     MATCH (u:Unit {uid: emp.unit_uid})
 
     MERGE (o)<-[:HELD_BY]-(e:Employment {highest_rank: emp.highest_rank})-[:IN_UNIT]->(u)
-    ON CREATE SET e.uid = replace(randomUUID(), "-", "")
-    SET e += emp.props
+    ON CREATE SET e.uid = emp.uid
+    SET
+      e.uid = coalesce(e.uid, emp.uid),
+      e += emp.props
 
 """ + merge_change_cypher(
     "e", "s", "employment_change", diff_expr="emp.diff"
@@ -246,6 +252,7 @@ async def upsert_officer_batch(
         row_id = int(record["row_id"])
         prefetch[row_id] = (
             record["sid"],
+            record.get("officer"),
             bool(record["exists"]),
             record["existing"],
             record["last_ts"],
@@ -264,8 +271,8 @@ async def upsert_officer_batch(
         incoming_data = incoming_by_id[row_id]
         incoming_emps = incoming_emps_by_id[row_id]
 
-        sid_uid, exists, existing_map, last_ts, employments = prefetch.get(
-            row_id, (None, False, None, None, []))
+        sid_uid, officer_uid, exists, existing_map, last_ts, employments = prefetch.get(
+            row_id, (None, None, False, None, None, []))
 
         # Freshness gate: skip if we already have a citation from
         # this source+url at or after this scraped time.
@@ -273,6 +280,12 @@ async def upsert_officer_batch(
             continue
 
         props = build_props_map(incoming_data, OFFICER_FIELDS)
+        target_uid = officer_uid or deterministic_node_uid(
+            "officer",
+            r["sid_state"],
+            r["sid_id_name"],
+            r["sid_id_value"],
+        )
         emps = []
 
         # if len(incoming_emps) != len(employments):
@@ -298,9 +311,22 @@ async def upsert_officer_batch(
             if not (rank and emp_props):
                 dropped_e_bad += 1
                 continue
+            employment_uid = fetched.get("employment_uid") or deterministic_node_uid(
+                "employment",
+                target_uid,
+                unit_uid,
+                rank,
+            )
             emp_base = {
+                "uid": employment_uid,
                 "unit_uid": unit_uid,
                 "highest_rank": rank,
+                "change_uid": det_change_uid(
+                    employment_uid,
+                    r["source_uid"],
+                    r["scraped_dt"],
+                    r["url"],
+                ),
                 "props": emp_props,
             }
             if not fetched.get("matched"):
@@ -323,6 +349,8 @@ async def upsert_officer_batch(
 
         base_apply = {
             **r,
+            "uid": target_uid,
+            "change_uid": det_change_uid(target_uid, r["source_uid"], r["scraped_dt"], r["url"]),
             "props": props,
             "sid": sid_uid,
             "employments": emps,
