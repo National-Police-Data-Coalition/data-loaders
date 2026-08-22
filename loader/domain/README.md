@@ -116,3 +116,53 @@ Two StateIDs can only be merged authoritatively if the owners of both namespaces
 
 **Identity assertion**  
 When two identifiers are not known authoritatively to describe the same person, we can create an `IdentityAssertion` node that records that a system, source, or user believes two `StateID` nodes may describe the same person. Based on the strength of the assertion and the goal of the query, the application may choose to treat the two identifiers as the same person or as separate people.
+
+
+## Sources
+
+`Source` nodes represent organizations or data providers that contribute records to the graph. Sources are responsible for provenance, namespace authority, and delegated permissions.
+
+### Namespace Claims
+
+A source can claim authority over an identifier namespace:
+
+```text
+(:Source)-[:CLAIMS_ID_NAMESPACE {claim_type, claimed_at, is_active}]->(:StateIDNamespace)
+```
+
+The `claim_type` describes the source's role for that namespace:
+
+- `OWNER`: the source controls the namespace and is responsible for unique values.
+- `STEWARD`: the source can administer or maintain the namespace without being its original owner.
+- `CONTRIBUTOR`: the source can contribute data associated with the namespace but does not control it.
+
+Namespace claims are the basis for deciding who must approve an identity merge or who can delegate authority to another source.
+
+### Source Permissions
+
+A source can grant another source permission to act within one or more namespaces. Permissions are modeled as first-class nodes so the graph can record the issuing source, receiving source, granting user, namespace scope, and revocation state.
+
+```text
+(:Source)-[:ISSUED_PERMISSION]->(:SourcePermission)
+(:SourcePermission)-[:GRANTED_TO_SOURCE]->(:Source)
+(:SourcePermission)-[:GRANTED_BY]->(:User)
+(:SourcePermission)-[:APPLIES_TO_NAMESPACE]->(:StateIDNamespace)
+```
+
+`SourcePermission` properties include:
+
+- `permission_type`: the delegated action, such as `ASSERT_SAME_IDENTITY` or `ACCEPT_IDENTITY_ASSERTION`.
+- `basis`: the reason or agreement supporting the permission.
+- `granted_at`: when the permission was granted.
+- `expires_at`: when the permission expires, if applicable.
+- `revoked_at`: when the permission was revoked, if applicable.
+- `is_active`: whether the permission is currently active.
+- `notes`: additional audit context.
+
+If a permission is revoked, it can also point to the revoking user:
+
+```text
+(:SourcePermission)-[:REVOKED_BY]->(:User)
+```
+
+The loader should treat a permission as usable only when it is active, not expired, not revoked, and scoped to the namespace involved in the attempted action.
