@@ -106,6 +106,83 @@ class SourceMember(AsyncStructuredRel):
         id={self.uid}>"
 
 
+class SourcePermissionType(str, PropertyEnum):
+    ASSERT_SAME_IDENTITY = "ASSERT_SAME_IDENTITY"
+    ACCEPT_IDENTITY_ASSERTION = "ACCEPT_IDENTITY_ASSERTION"
+
+
+class SourcePermission(AsyncStructuredNode):
+    """
+    Permission granted by one source to another.
+
+    For example, CPDP may allow an NPI-derived load to assert that a CPDP
+    officer identifier belongs to the same person as an NPI officer identifier.
+    """
+    uid = UniqueIdProperty()
+    permission_type = StringProperty(
+        choices=SourcePermissionType.choices(),
+        required=True,
+    )
+    scope = StringProperty()
+    basis = StringProperty()
+    granted_at = DateTimeProperty(default_now=True)
+    expires_at = DateTimeProperty()
+    revoked_at = DateTimeProperty()
+    is_active = BooleanProperty(default=True)
+    notes = StringProperty()
+
+    granted_to = AsyncRelationshipTo(
+        "Source",
+        "GRANTED_TO_SOURCE",
+        cardinality=AsyncOne
+    )
+    granted_by_user = AsyncRelationshipTo(
+        "loader.domain.user.User",
+        "GRANTED_BY",
+        cardinality=AsyncOne
+    )
+    revoked_by_user = AsyncRelationshipTo(
+        "loader.domain.user.User",
+        "REVOKED_BY",
+        cardinality=AsyncZeroOrOne
+    )
+    applies_to_namespaces = AsyncRelationshipTo(
+        "loader.domain.officer.StateIDNamespace",
+        "APPLIES_TO_NAMESPACE"
+    )
+
+    def __repr__(self):
+        return f"<SourcePermission {self.permission_type}>"
+
+
+class SourceIDNamespaceClaimType(str, PropertyEnum):
+    OWNER = "OWNER"
+    STEWARD = "STEWARD"
+    CONTRIBUTOR = "CONTRIBUTOR"
+
+
+class SourceIDNamespaceClaim(AsyncStructuredRel):
+    """
+    A source's claim of authority over an identifier namespace.
+
+    Claims are made at the namespace level so ownership does not need to be
+    repeated on every StateID value in that namespace.
+    """
+    uid = UniqueIdProperty()
+    claim_type = StringProperty(
+        choices=SourceIDNamespaceClaimType.choices(),
+        required=True,
+    )
+    basis = StringProperty()
+    claimed_at = DateTimeProperty(default_now=True)
+    expires_at = DateTimeProperty()
+    is_active = BooleanProperty(default=True)
+    notes = StringProperty()
+
+    def __repr__(self):
+        return f"<SourceIDNamespaceClaim {self.claim_type}>"
+
+
 class Change(AsyncStructuredNode):
     uid = UniqueIdProperty()
     timestamp = DateTimeProperty(
@@ -195,6 +272,15 @@ class Source(AsyncStructuredNode):
     members = AsyncRelationshipFrom(
         "loader.domain.user.User",
         "IS_MEMBER", model=SourceMember)
+    permissions_granted = AsyncRelationshipTo(
+        "SourcePermission",
+        "ISSUED_PERMISSION"
+    )
+    id_namespaces = AsyncRelationshipTo(
+        "loader.domain.officer.StateIDNamespace",
+        "CLAIMS_ID_NAMESPACE",
+        model=SourceIDNamespaceClaim
+    )
     invitations = AsyncRelationshipTo(
         "Invitation", "HAS_PENDING_INVITATION")
     staged_invitations = AsyncRelationshipTo(

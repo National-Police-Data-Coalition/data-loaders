@@ -86,6 +86,10 @@ When adding deterministic keys for other entity types, prefer the same pattern:
 - Store the full SHA-256 hex digest unless there is a documented reason to use a different format.
 - Centralize the implementation in a helper so creators and resolvers use identical logic.
 
+## Domain Model Notes
+
+See [loader/domain/README.md](loader/domain/README.md) for notes on officer identity resolution, source-specific officer records, identifier namespace ownership, identity assertions, and manual review locks.
+
 ## Functions
 
 ### Key Functions
